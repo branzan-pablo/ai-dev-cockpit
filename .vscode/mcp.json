@@ -1,1 +1,14 @@
-{"servers":{"ai-dev-cockpit":{"type":"stdio","command":"node","args":["--import","tsx","${workspaceFolder}/apps/mcp-server/index.ts"],"cwd":"${workspaceFolder}"}}}
+{
+  "servers": {
+    "ai-dev-cockpit": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "--import",
+        "tsx",
+        "${workspaceFolder}/apps/mcp-server/index.ts"
+      ],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}
