@@ -1,4 +1,5 @@
 import { AnalysisSchema, type Analysis } from '../../packages/contracts/index.js';
+import { buildDeterministicReview, inferFileMetadata } from '../../packages/review-engine/index.js';
 
 const MAX_FILES = 30;
 const MAX_PATCH_CHARS = 20_000;
@@ -12,8 +13,9 @@ interface GitHubPullRequest {
   changed_files: number;
   additions: number;
   deletions: number;
-  head: { sha: string };
+  head: { sha: string; ref: string };
   base: { ref: string };
+  user: { login: string };
 }
 
 interface GitHubFile {
@@ -80,18 +82,18 @@ export async function fetchPullRequestAnalysis(prUrl: string): Promise<Analysis>
       path: file.filename,
       status: file.status,
       priority: classifyPriority(file),
+      ...inferFileMetadata(file.filename),
       additions: file.additions,
       deletions: file.deletions,
       diff: rawPatch ? `${rawPatch.slice(0, MAX_PATCH_CHARS)}${truncated ? '\n… patch truncado pelo Cockpit' : ''}` : 'Patch não disponibilizado pelo GitHub para este arquivo.',
       patchAvailable: Boolean(rawPatch),
     };
   });
-  const limitations: string[] = ['Prioridades e explicações usam regras determinísticas; a análise por IA ainda não está habilitada.'];
-  if (pr.changed_files > MAX_FILES) limitations.push(`Mostrando ${MAX_FILES} de ${pr.changed_files} arquivos alterados.`);
+  const limitations: string[] = ['Análise produzida por regras locais. Configure a camada de IA para obter revisão contextual.'];
   if (selectedFiles.some((file) => !file.patchAvailable)) limitations.push('Alguns patches não foram disponibilizados pelo GitHub.');
   if (selectedFiles.some((file) => file.diff.endsWith('patch truncado pelo Cockpit'))) limitations.push('Alguns patches foram truncados por limite de tamanho.');
   return AnalysisSchema.parse({
-    schemaVersion: 1,
+    schemaVersion: 2,
     analysisId: `github:${repository}#${pr.number}@${pr.head.sha}`,
     source: 'github',
     title: pr.title,
@@ -99,9 +101,14 @@ export async function fetchPullRequestAnalysis(prUrl: string): Promise<Analysis>
     prNumber: pr.number,
     prUrl: pr.html_url,
     state: pr.state,
+    author: pr.user.login,
+    baseRef: pr.base.ref,
+    headRef: pr.head.ref,
     headSha: pr.head.sha,
     summary: `${pr.changed_files} arquivos alterados · +${pr.additions} / −${pr.deletions} · base ${pr.base.ref}`,
+    description: pr.body ?? undefined,
     files: selectedFiles,
+    review: buildDeterministicReview(selectedFiles),
     partial: pr.changed_files > MAX_FILES || selectedFiles.some((file) => !file.patchAvailable),
     limitations,
   });

@@ -4,12 +4,28 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { AnalysisSchema, ExplanationSchema } from '../packages/contracts/index.js';
 import { classifyPriority, parsePullRequestUrl } from '../apps/mcp-server/github.js';
+import { buildDeterministicReview, inferFileMetadata } from '../packages/review-engine/index.js';
 
 test('validates GitHub PR URLs and deterministic priorities', () => {
   assert.deepEqual(parsePullRequestUrl('https://github.com/branzan-pablo/largada/pull/22'), { owner: 'branzan-pablo', repo: 'largada', prNumber: 22 });
   assert.throws(() => parsePullRequestUrl('https://example.com/a/b/pull/1'));
   assert.throws(() => parsePullRequestUrl('https://github.com/a/b/issues/1'));
   assert.equal(classifyPriority({ filename: 'public/pix.svg', patch: '+ viewBox="0 0 NaN NaN"', additions: 1, deletions: 0 }), 'high');
+});
+
+test('classifies files and creates evidence-based deterministic findings', () => {
+  assert.deepEqual(inferFileMetadata('src/components/button.tsx'), { kind: 'source', language: 'TypeScript React' });
+  assert.equal(inferFileMetadata('e2e/checkout.spec.ts').kind, 'test');
+  assert.equal(inferFileMetadata('prisma/migrations/001.sql').kind, 'migration');
+  const file = {
+    path: 'public/image.svg', status: 'modified', priority: 'high' as const, kind: 'asset' as const, language: 'SVG',
+    additions: 1, deletions: 0, diff: '+<svg viewBox="0 0 NaN NaN">', patchAvailable: true,
+  };
+  const review = buildDeterministicReview([file]);
+  assert.equal(review.mode, 'deterministic');
+  assert.equal(review.findings[0]?.category, 'correctness');
+  assert.equal(review.findings[0]?.evidence[0]?.filePath, file.path);
+  assert.ok(review.riskScore >= 20);
 });
 
 test('stdio: discovery, UI resource, analysis, interaction and invalid input',async()=>{
@@ -23,6 +39,8 @@ test('stdio: discovery, UI resource, analysis, interaction and invalid input',as
   const analysis=AnalysisSchema.parse(result.structuredContent);
   assert.equal(analysis.source,'fixture');
   assert.equal(analysis.files.length,3);
+  assert.equal(analysis.schemaVersion,2);
+  assert.ok(analysis.review.findings.length>0);
   const ui=await client.readResource({uri:'ui://cockpit/dashboard.html'});
   assert.equal(ui.contents[0].mimeType,'text/html;profile=mcp-app');
   assert.ok('text' in ui.contents[0] && ui.contents[0].text.includes('AI Dev Cockpit'));
