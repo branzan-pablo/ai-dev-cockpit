@@ -4,6 +4,7 @@
       "type": "stdio",
       "command": "node",
       "args": [
+        "--env-file-if-exists=.env",
         "--import",
         "tsx",
         "${workspaceFolder}/apps/mcp-server/index.ts"

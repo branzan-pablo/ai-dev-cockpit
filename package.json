@@ -1,6 +1,6 @@
 {
   "name": "ai-dev-cockpit",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -9,13 +9,14 @@
   "scripts": {
     "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "start": "node --import tsx apps/mcp-server/index.ts",
+    "start": "node --env-file-if-exists=.env --import tsx apps/mcp-server/index.ts",
     "test": "node --import tsx --test tests/*.test.ts",
     "check": "npm run typecheck && npm run build && npm test"
   },
   "dependencies": {
     "@modelcontextprotocol/ext-apps": "1.7.5",
     "@modelcontextprotocol/sdk": "1.30.0",
+    "ai": "^7.0.107",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "zod": "4.6.5"

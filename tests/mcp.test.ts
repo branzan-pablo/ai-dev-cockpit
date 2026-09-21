@@ -5,6 +5,8 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { AnalysisSchema, ExplanationSchema } from '../packages/contracts/index.js';
 import { classifyPriority, parsePullRequestUrl } from '../apps/mcp-server/github.js';
 import { buildDeterministicReview, inferFileMetadata } from '../packages/review-engine/index.js';
+import { prepareAiInput } from '../apps/mcp-server/ai-review.js';
+import { analysis as fixtureAnalysis } from '../fixtures/payment.js';
 
 test('validates GitHub PR URLs and deterministic priorities', () => {
   assert.deepEqual(parsePullRequestUrl('https://github.com/branzan-pablo/largada/pull/22'), { owner: 'branzan-pablo', repo: 'largada', prNumber: 22 });
@@ -28,6 +30,13 @@ test('classifies files and creates evidence-based deterministic findings', () =>
   assert.ok(review.riskScore >= 20);
 });
 
+test('prepares bounded AI input and redacts obvious secrets', () => {
+  const input = prepareAiInput({ ...fixtureAnalysis, files: fixtureAnalysis.files.map((file, index) => index === 0 ? { ...file, diff: '+ token = "ghp_abcdefghijklmnopqrstuvwxyz123456"' } : file) });
+  assert.ok(input.files.length > 0);
+  assert.equal(JSON.stringify(input).includes('ghp_abcdefghijklmnopqrstuvwxyz123456'), false);
+  assert.equal(JSON.stringify(input).includes('[REDACTED'), true);
+});
+
 test('stdio: discovery, UI resource, analysis, interaction and invalid input',async()=>{
  const client=new Client({name:'cockpit-test',version:'1.0.0'});
  const transport=new StdioClientTransport({command:process.execPath,args:['--import','tsx','apps/mcp-server/index.ts']});
@@ -35,7 +44,7 @@ test('stdio: discovery, UI resource, analysis, interaction and invalid input',as
   await client.connect(transport);
   const list=await client.listTools();
   assert.deepEqual(list.tools.map(t=>t.name).sort(),['analyze_pr','explain_change']);
-  const result=await client.callTool({name:'analyze_pr',arguments:{}});
+  const result=await client.callTool({name:'analyze_pr',arguments:{useAi:false}});
   const analysis=AnalysisSchema.parse(result.structuredContent);
   assert.equal(analysis.source,'fixture');
   assert.equal(analysis.files.length,3);
