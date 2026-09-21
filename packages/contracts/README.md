@@ -1,3 +1,3 @@
 # Contratos
 
-Schemas Zod de análise e explicação da demonstração. Inputs restritos ao snapshot sintético. Expansão para GitHub real e demais tools pendente.
+Schemas Zod compartilhados entre servidor, dashboard, fixtures e testes: análise v2, arquivos, review, achados, evidências, delivery, explicação e plano de testes.

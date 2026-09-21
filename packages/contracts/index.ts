@@ -53,6 +53,10 @@ export const ExplanationSchema = z.object({
   analysisId: z.string(), source: SourceSchema, filePath: z.string(), explanation: z.string(), check: z.string(),
   requestedAt: z.string().datetime(), mode: z.enum(['deterministic', 'ai']).default('deterministic'),
 });
+export const TestPlanSchema = z.object({
+  analysisId: z.string(), filePath: z.string().optional(), tests: z.array(TestSuggestionSchema),
+  executionStatus: z.literal('not_run'), disclaimer: z.string(), generatedAt: z.string().datetime(),
+});
 
 export type ChangedFile = z.infer<typeof FileSchema>;
 export type Finding = z.infer<typeof FindingSchema>;
@@ -60,3 +64,4 @@ export type TestSuggestion = z.infer<typeof TestSuggestionSchema>;
 export type Review = z.infer<typeof ReviewSchema>;
 export type Analysis = z.infer<typeof AnalysisSchema>;
 export type Explanation = z.infer<typeof ExplanationSchema>;
+export type TestPlan = z.infer<typeof TestPlanSchema>;

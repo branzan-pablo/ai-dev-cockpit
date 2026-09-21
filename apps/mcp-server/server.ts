@@ -3,7 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerAppTool, registerAppResource, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
 import { analysis, explanations } from '../../fixtures/payment.js';
-import { AnalysisSchema, ExplanationSchema, type Analysis } from '../../packages/contracts/index.js';
+import { AnalysisSchema, ExplanationSchema, TestPlanSchema, type Analysis } from '../../packages/contracts/index.js';
 import { fetchPullRequestAnalysis } from './github.js';
 import { generateAiReview, isAiConfigured } from './ai-review.js';
 
@@ -38,7 +38,7 @@ function explainFile(current: Analysis, filePath: string) {
 }
 
 export function createServer() {
-  const server = new McpServer({ name: 'ai-dev-cockpit', version: '0.3.0' });
+  const server = new McpServer({ name: 'ai-dev-cockpit', version: '0.4.0' });
   registerAppResource(server, 'Cockpit', resourceUri, { mimeType: RESOURCE_MIME_TYPE }, async () => ({ contents: [{ uri: resourceUri, mimeType: RESOURCE_MIME_TYPE, text: await readFile(new URL('../../dist/ui/index.html', import.meta.url), 'utf8') }] }));
   registerAppTool(server, 'analyze_pr', {
     description: 'Analisa um PR e abre o AI Dev Cockpit. A IA é usada quando configurada; useAi=false força as regras locais.',
@@ -82,6 +82,25 @@ export function createServer() {
       return { content: [{ type: 'text', text: result.explanation }], structuredContent: result };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Falha ao explicar o arquivo.';
+      return { isError: true, content: [{ type: 'text', text: message }] };
+    }
+  });
+  registerAppTool(server, 'generate_tests', {
+    description: 'Retorna um plano de testes não executado para o snapshot analisado, opcionalmente filtrado por arquivo.',
+    inputSchema: { analysisId: z.string().min(1), filePath: z.string().min(1).optional() },
+    outputSchema: TestPlanSchema.shape,
+    annotations: { readOnlyHint: true },
+    _meta: { ui: { resourceUri, visibility: ['app', 'model'] } },
+  }, async ({ analysisId, filePath }) => {
+    try {
+      const current = analyses.get(analysisId);
+      if (!current) throw new Error('Análise expirada ou desconhecida. Execute analyze_pr novamente.');
+      if (filePath && !current.files.some((file) => file.path === filePath)) throw new Error('Arquivo não pertence ao snapshot analisado.');
+      const tests = current.review.tests.filter((test) => !filePath || test.relatedFiles.includes(filePath));
+      const result = TestPlanSchema.parse({ analysisId, filePath, tests, executionStatus: 'not_run', disclaimer: 'Sugestões geradas para orientar a validação. Nenhum teste foi criado ou executado automaticamente.', generatedAt: new Date().toISOString() });
+      return { content: [{ type: 'text', text: `${tests.length} teste(s) sugerido(s). Nenhum teste foi executado.` }], structuredContent: result };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao gerar o plano de testes.';
       return { isError: true, content: [{ type: 'text', text: message }] };
     }
   });

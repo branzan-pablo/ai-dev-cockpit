@@ -1,47 +1,63 @@
-# Arquitetura proposta
+# Arquitetura
+
+## Fluxo principal
+
+1. O modelo do host chama `analyze_pr` com a URL do PR.
+2. O servidor valida estritamente `https://github.com/{owner}/{repo}/pull/{number}`.
+3. A integração busca metadados, arquivos e commit statuses do GitHub.
+4. O review engine classifica arquivos e produz um fallback determinístico.
+5. Se o AI Gateway estiver configurado, a revisão contextual substitui o review local; qualquer falha preserva o fallback.
+6. A resposta estruturada é validada e associada ao `head SHA` em um cache LRU na memória.
+7. O host carrega `ui://cockpit/dashboard.html`; a UI renderiza o snapshot e chama tools adicionais pelo host.
 
 ## Componentes
-- apps/mcp-server: tools MCP, recurso HTML, integração GitHub e chamadas ao provedor de IA.
-- apps/cockpit-ui: React/TypeScript, UI e comunicação com o host pelo SDK MCP Apps.
-- packages/contracts: tipos e schemas compartilhados.
-- fixtures: dados sintéticos e respostas para demonstração.
 
-## Fluxo
-1. Usuário pede análise; o modelo do host invoca analyze_pr.
-2. Servidor obtém um snapshot do PR e analisa seu conteúdo.
-3. Host carrega o recurso UI e entrega o resultado estruturado.
-4. UI chama tools pelo host ao selecionar ações.
-5. Servidor retorna resultados; UI atualiza o painel correspondente.
+| Componente | Responsabilidade |
+| --- | --- |
+| `apps/mcp-server/server.ts` | Registro das tools, recurso HTML, snapshots e erros públicos. |
+| `apps/mcp-server/github.ts` | URL, GitHub REST, paginação limitada, statuses, cache e cobertura parcial. |
+| `apps/mcp-server/ai-review.ts` | Prompt seguro, redação, orçamento de contexto e saída estruturada. |
+| `packages/review-engine` | Metadados de arquivo, regras, evidências, risco e testes locais. |
+| `packages/contracts` | Schemas Zod usados pelo servidor, UI e testes. |
+| `apps/cockpit-ui` | Dashboard adaptativo e chamadas bidirecionais MCP Apps. |
 
-Um clique não implica uma nova decisão do modelo do host. O servidor chama seu próprio provedor de IA nas operações que exigem geração. Credencial e custos dessa API são separados da assinatura do cliente.
+## Contrato de análise v2
 
-## Contratos propostos
-| Tool | Entrada | Saída |
-| --- | --- | --- |
-| analyze_pr | owner, repo, prNumber | analysisId, baseSha, headSha, summary, files, findings, coverage |
-| analyze_file | analysisId, filePath | findings, evidence, limitations |
-| explain_change | analysisId, filePath, findingId opcional | explanation, potentialImpact, checks |
-| generate_tests | analysisId, findingId | fileName, code, framework, scenario, executionStatus=not_run |
+`Analysis` inclui identidade do snapshot, origem, PR, branches, autor, arquivos classificados, `Review`, `Delivery`, estado parcial e limitações. Cada arquivo carrega linguagem, tipo, prioridade, contagens, patch e disponibilidade.
 
-Analysis: schemaVersion, analysisId, source (github/fixture), repository, prNumber, baseSha, headSha, generatedAt, status (complete/partial), coverage e limitations.
-Finding: id, filePath, priority (high/medium/low), title, rationale, evidence e limitations.
-Evidence: trecho, lado do diff, linha inicial/final quando disponíveis. Validar contra o snapshot; não inventar linhas.
-TestSuggestion: código, cenário, suposições e status não executado.
+`Review` contém modo (`deterministic` ou `ai`), modelo opcional, timestamp, score 0–100, veredito, resumo, achados e testes. Um achado sempre exige pelo menos uma evidência vinculada a caminho válido do snapshot.
 
-## Decisões iniciais
-- Um monorepositório simples; evitar infraestrutura adicional antes de M1.
-- Memória com TTL e limites para a PoC; reinício pode exigir nova análise.
-- Todas as ações vinculadas ao mesmo snapshot. Detectar head SHA novo e oferecer reanálise.
-- UI compacta com prioridade explicada; sem score numérico de risco no MVP.
-- Transporte e configuração do host definidos e testados em M1.
-- Sem banco, autenticação de produto ou deploy público nesta etapa. Endpoint remoto, se necessário, exige proteção apropriada antes de expor código privado.
+`Delivery` resume os commit statuses e pode incluir uma URL HTTPS de preview. O cockpit não cria nem executa esse deployment.
 
-## Confiabilidade
-Validar inputs e outputs. Restringir consultas a arquivos do snapshot. Credenciais apenas no servidor e fora dos logs. Tratar código e descrição do PR como entrada não confiável. Limitar tamanho, tempo e chamadas de IA; informar omissões. Não executar código do repositório. Ausência de achados não representa garantia de segurança.
+## IA e confiança
 
-## Referências para M1
-- https://modelcontextprotocol.io/extensions/apps/overview
-- https://modelcontextprotocol.io/extensions/apps/build
-- https://modelcontextprotocol.io/extensions/client-matrix
+- Modelo padrão: `openai/gpt-5.6-luna` via AI SDK e Vercel AI Gateway; configurável por ambiente.
+- Saída: `generateText` com `Output.object` e schema Zod.
+- Temperatura 0, timeout total de 45 segundos e máximo de 4.000 tokens de saída.
+- No máximo 60.000 caracteres de patches entram no prompt.
+- Segredos de formatos conhecidos são redigidos antes do envio.
+- Título, descrição, caminhos e diffs ficam dentro de um bloco explicitamente não confiável.
+- Evidências de IA que referenciem arquivos externos ao snapshot são descartadas.
+- Falha, ausência de chave ou saída inválida retorna review determinístico.
 
-Verificar documentação e versões no início da implementação; suporte varia por cliente.
+## Cache e consistência
+
+- GitHub: cache LRU de até 20 PRs por dois minutos; `refresh: true` ignora o cache.
+- Snapshots de tools: até 20 análises na memória, identificadas por repositório, PR e head SHA.
+- Reiniciar o processo apaga o cache e exige nova chamada a `analyze_pr`.
+- `explain_change` e `generate_tests` rejeitam caminhos que não pertençam ao snapshot.
+
+## Limites atuais
+
+- Até 60 arquivos e 20.000 caracteres de patch por arquivo.
+- Commit statuses não representam necessariamente todos os GitHub Check Runs.
+- Sem persistência, login próprio, comentários automáticos, aprovação automática ou execução de código.
+- A UI mostra diffs e abre previews existentes; ela não recompila a aplicação do PR.
+
+## Evolução recomendada
+
+1. Persistência por head SHA e versão do prompt/modelo.
+2. GitHub App em vez de token pessoal para uso em equipe.
+3. Check Runs e deployments para melhor cobertura de CI/preview.
+4. Comentário no PR somente com confirmação explícita do usuário.
+5. Execução isolada em sandbox efêmero, nunca no host do MCP, caso previews automáticos se tornem requisito.

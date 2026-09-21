@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { AnalysisSchema, ExplanationSchema } from '../packages/contracts/index.js';
+import { AnalysisSchema, ExplanationSchema, TestPlanSchema } from '../packages/contracts/index.js';
 import { classifyPriority, parsePullRequestUrl } from '../apps/mcp-server/github.js';
 import { buildDeterministicReview, inferFileMetadata } from '../packages/review-engine/index.js';
 import { prepareAiInput } from '../apps/mcp-server/ai-review.js';
@@ -43,7 +43,7 @@ test('stdio: discovery, UI resource, analysis, interaction and invalid input',as
  try{
   await client.connect(transport);
   const list=await client.listTools();
-  assert.deepEqual(list.tools.map(t=>t.name).sort(),['analyze_pr','explain_change']);
+  assert.deepEqual(list.tools.map(t=>t.name).sort(),['analyze_pr','explain_change','generate_tests']);
   const result=await client.callTool({name:'analyze_pr',arguments:{useAi:false}});
   const analysis=AnalysisSchema.parse(result.structuredContent);
   assert.equal(analysis.source,'fixture');
@@ -59,6 +59,10 @@ test('stdio: discovery, UI resource, analysis, interaction and invalid input',as
    assert.equal(parsed.filePath,file.path);
    assert.ok(parsed.explanation.length>20);
   }
+  const plan=await client.callTool({name:'generate_tests',arguments:{analysisId:analysis.analysisId,filePath:'src/payment.ts'}});
+  const parsedPlan=TestPlanSchema.parse(plan.structuredContent);
+  assert.equal(parsedPlan.executionStatus,'not_run');
+  assert.ok(parsedPlan.tests.length>0);
   const invalid=await client.callTool({name:'explain_change',arguments:{analysisId:analysis.analysisId,filePath:'../../.env'}});
   assert.equal(invalid.isError,true);
   const stale=await client.callTool({name:'explain_change',arguments:{analysisId:'unknown',filePath:'src/payment.ts'}});

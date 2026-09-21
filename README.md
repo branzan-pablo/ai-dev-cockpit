@@ -1,70 +1,114 @@
 # AI Dev Cockpit
 
-Dashboard interativo dentro de um cliente de IA para analisar Pull Requests, explicar alterações e sugerir testes com MCP Apps.
+MCP App para revisar Pull Requests reais dentro do chat de IA. O servidor consulta o GitHub, analisa os diffs, devolve dados estruturados e renderiza um dashboard React interativo no VS Code.
 
-> Status: MCP App validado no VS Code/Copilot. `analyze_pr` consulta PRs públicos reais do GitHub, exibe arquivos/diffs e permite explicar cada alteração por regras determinísticas. IA e geração de testes continuam no backlog.
+## O que já funciona
 
-## Objetivo
-Demonstrar uma jornada completa: pedir análise de PR na conversa, visualizar uma interface, selecionar um arquivo e solicitar explicações ou testes sem sair do cliente de IA.
+- PRs públicos e privados do GitHub, fixados ao `head SHA` analisado.
+- Dashboard com visão executiva, score de risco, achados, arquivos/diffs e plano de testes.
+- Revisão contextual opcional por IA via Vercel AI Gateway, com saída validada por Zod.
+- Fallback determinístico sem chave de IA: regras locais, evidências e sugestões de teste.
+- Explicação focada por arquivo e tool `generate_tests` com status explícito `not_run`.
+- Estado de commit statuses/CI e link para preview quando GitHub/Vercel o publica.
+- Cache curto e limitado, atualização forçada pela UI, timeout e limites de arquivos/contexto.
+- Proteções contra prompt injection, redação de segredos e nenhuma execução do código do PR.
 
-## MVP
-- `analyze_pr`: resumo do PR e prioridades de revisão.
-- `analyze_file`: achados por arquivo, com evidências.
-- `explain_change`: explicação da mudança e impacto potencial.
-- `generate_tests`: sugestão de teste, explicitamente não executado.
-- Um dashboard com resumo, lista de arquivos, diff e painel de resultados.
-- GitHub como primeiro provedor; um repositório de demonstração.
+## Requisitos
 
-## Stack planejada
-React, TypeScript e Vite na interface; Node.js e TypeScript no servidor; SDK MCP e `@modelcontextprotocol/ext-apps`; schemas compartilhados; um provedor de IA chamado pelo servidor. Dependências fixadas no package.json e package-lock.json. MCP SDK 1.x com MCP Apps 1.7.5; migração para a linha 2.x fica fora desta etapa.
+- Node.js 22.12 ou superior.
+- VS Code atualizado com GitHub Copilot Chat e suporte a MCP Apps.
+- GitHub token opcional para repositórios privados ou maior limite de API.
+- Vercel AI Gateway API key opcional para análise por IA.
 
-## Organização
-- `apps/mcp-server/`: servidor, ferramentas e integrações.
-- `apps/cockpit-ui/`: interface MCP App.
-- `packages/contracts/`: contratos e validação.
-- `fixtures/`: dados sintéticos para desenvolvimento e demonstração.
-- `docs/PLAN.md`: backlog, sequência e critérios de aceite.
-- `docs/ARCHITECTURE.md`: decisões técnicas e contratos propostos.
-- `docs/DEMO.md`: cenário e roteiro da apresentação.
+## Instalação no Windows
 
-## Primeiro marco
-Validar no cliente escolhido uma ferramenta que abre a interface e um botão que chama o servidor e atualiza a tela. Começar com dados sintéticos identificados. A compatibilidade do host deve ser comprovada antes da integração real.
-
-## Desenvolvimento
-Requer Node.js 22.12+ e npm. Clone o repositório:
-```sh
+```powershell
 git clone https://github.com/branzan-pablo/ai-dev-cockpit.git
 cd ai-dev-cockpit
-```
-
-## Limites
-Prioridade de revisão não é garantia de segurança. A análise pode ser parcial e deve informar seu escopo. Não executar automaticamente código ou testes vindos de repositórios. Credenciais ficam somente no servidor.
-
-## Referências
-- [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview)
-- [Guia de construção](https://modelcontextprotocol.io/extensions/apps/build)
-- [Compatibilidade dos clientes](https://modelcontextprotocol.io/extensions/client-matrix)
-
-## Executar a primeira versão
-```sh
 npm ci
 npm run check
+Copy-Item .env.example .env
 ```
-`check` verifica tipos, gera o HTML da interface e testa o servidor pelo transporte stdio. Não precisa de token GitHub ou chave de IA nesta etapa.
 
-Abra a raiz do projeto no VS Code. A configuração em `.vscode/mcp.json` inicia o servidor local. Abra o arquivo de configuração, reinicie `ai-dev-cockpit` e habilite suas ferramentas no chat do Copilot. Peça: **Use analyze_pr do ai-dev-cockpit com prUrl https://github.com/owner/repo/pull/123.** Sem `prUrl`, a ferramenta abre o cenário de demonstração.
+Edite `.env` conforme necessário:
 
-Selecione um arquivo e clique em **Explicar alteração**. O horário retornado comprova a segunda chamada ao servidor. Em PRs reais, a explicação ainda é determinística e isso aparece no dashboard.
+```dotenv
+GITHUB_TOKEN=
+AI_GATEWAY_API_KEY=
+AI_MODEL=openai/gpt-5.6-luna
+```
 
-### GitHub
-PRs públicos funcionam sem configuração adicional, sujeitos ao limite anônimo da API. Para repositórios privados ou maior limite, defina `GITHUB_TOKEN` no ambiente do processo — nunca no repositório. Nesta etapa, use um token somente com acesso de leitura ao conteúdo e Pull Requests necessários.
+O arquivo `.env` é ignorado pelo Git. Nunca coloque tokens em `.vscode/mcp.json` ou em commits.
 
-`npm start` inicia o transporte stdio; não abre uma página nem uma porta HTTP. Não digite mensagens nesse terminal. O cliente MCP normalmente inicia o processo automaticamente. Após alterar a interface, execute `npm run build`; após alterar o servidor, reinicie-o no cliente.
+## Usar no VS Code
 
-### Validação manual pendente
-- A interface deve aparecer dentro da conversa.
-- O botão deve atualizar a explicação dos três arquivos.
-- Falhas de conexão devem produzir mensagem legível.
-- Navegação por teclado e painel estreito devem permanecer utilizáveis.
+1. Abra a raiz `ai-dev-cockpit` no VS Code.
+2. Abra `.vscode/mcp.json`.
+3. Inicie ou reinicie o servidor `ai-dev-cockpit` pelo link exibido sobre a configuração.
+4. Abra o Chat do Copilot e habilite as tools desse servidor.
+5. Envie:
 
-Se apenas texto aparecer, confira o suporte a MCP Apps e a habilitação do servidor no cliente. O teste automatizado do protocolo não substitui esta validação visual.
+```text
+Use exclusivamente a ferramenta analyze_pr do servidor ai-dev-cockpit,
+passando prUrl como https://github.com/owner/repo/pull/123
+```
+
+O dashboard será aberto dentro da conversa. Navegue por **Visão geral**, **Achados**, **Arquivos** e **Testes**. Em um arquivo, **Explicar alteração** faz uma segunda chamada ao servidor. **Atualizar PR** ignora o cache e lê o snapshot atual. Se houver um deployment status reconhecido, **Abrir preview** solicita ao host que abra a URL externa.
+
+Sem `prUrl`, `analyze_pr` abre o cenário sintético de demonstração. Use `useAi: false` para forçar análise local mesmo com chave configurada.
+
+## Configuração
+
+| Variável | Obrigatória | Uso |
+| --- | --- | --- |
+| `GITHUB_TOKEN` | Não | PRs privados e maior rate limit; conceda apenas leitura necessária. |
+| `AI_GATEWAY_API_KEY` | Não | Habilita a revisão contextual por IA. |
+| `AI_MODEL` | Não | Modelo do Gateway; padrão `openai/gpt-5.6-luna`. |
+
+O servidor lê `.env` pelo próprio Node ao ser iniciado pela configuração versionada do VS Code. Após alterar `.env`, reinicie o servidor MCP.
+
+## Tools MCP
+
+| Tool | Entrada principal | Resultado |
+| --- | --- | --- |
+| `analyze_pr` | `prUrl?`, `useAi?`, `refresh?` | Snapshot completo e abre o dashboard. |
+| `explain_change` | `analysisId`, `filePath` | Explicação e verificação focadas no arquivo. |
+| `generate_tests` | `analysisId`, `filePath?` | Plano sugerido, explicitamente não executado. |
+
+## Desenvolvimento
+
+```sh
+npm run typecheck
+npm run build
+npm test
+npm run check
+```
+
+Teste opcional contra um PR público real:
+
+```powershell
+$env:REAL_PR_URL='https://github.com/owner/repo/pull/123'
+npm test
+```
+
+`npm start` inicia transporte stdio: não abre página nem porta HTTP. O cliente MCP normalmente inicia esse processo. Depois de alterar a UI, execute `npm run build`; depois de alterar o servidor, reinicie-o no VS Code.
+
+## Estrutura
+
+- `apps/mcp-server/`: tools, GitHub, IA, cache e recurso MCP App.
+- `apps/cockpit-ui/`: dashboard React empacotado em um único HTML.
+- `packages/contracts/`: contratos Zod compartilhados.
+- `packages/review-engine/`: classificação e regras locais.
+- `fixtures/`: cenário reproduzível sem serviços externos.
+- `tests/`: unidade, transporte stdio e integração real opcional.
+- `docs/`: arquitetura, roteiro, plano e solução de problemas.
+
+## Limites de segurança e produto
+
+- O cockpit não executa checkout, dependências, build ou testes do PR.
+- Preview visual só é aberto quando já existe uma URL HTTPS publicada nos statuses do commit.
+- A API do GitHub pode omitir patches binários ou muito grandes; isso aparece como análise parcial.
+- A IA recebe contexto limitado e redigido. Ainda assim, não use código sensível com provedores externos sem aprovação organizacional.
+- Score e achados orientam a revisão; não garantem segurança, correção ou aprovação de merge.
+
+Veja [Arquitetura](docs/ARCHITECTURE.md), [Troubleshooting](docs/TROUBLESHOOTING.md), [Roteiro de demonstração](docs/DEMO.md) e [Política de segurança](SECURITY.md).
