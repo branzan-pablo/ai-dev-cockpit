@@ -1,8 +1,11 @@
 import { AnalysisSchema, type Analysis } from '../../packages/contracts/index.js';
 import { buildDeterministicReview, inferFileMetadata } from '../../packages/review-engine/index.js';
 
-const MAX_FILES = 30;
+const MAX_FILES = 60;
 const MAX_PATCH_CHARS = 20_000;
+const CACHE_TTL_MS = 2 * 60_000;
+const MAX_CACHE_ENTRIES = 20;
+const cache = new Map<string, { expiresAt: number; value: Analysis }>();
 
 interface GitHubPullRequest {
   html_url: string;
@@ -24,6 +27,11 @@ interface GitHubFile {
   additions: number;
   deletions: number;
   patch?: string;
+}
+
+interface GitHubCombinedStatus {
+  state: 'pending' | 'success' | 'failure' | 'error';
+  statuses: Array<{ state: string; context: string; target_url: string | null }>;
 }
 
 export function parsePullRequestUrl(value: string) {
@@ -52,10 +60,31 @@ async function githubGet<T>(url: string): Promise<T> {
   const response = await fetch(url, { headers: requestHeaders(), signal: AbortSignal.timeout(15_000) });
   if (!response.ok) {
     if (response.status === 404) throw new Error('PR não encontrado ou sem permissão de acesso.');
-    if (response.status === 403) throw new Error('Limite da API do GitHub atingido. Configure GITHUB_TOKEN e reinicie o servidor.');
+    if (response.status === 403 || response.status === 429) {
+      const reset = response.headers.get('x-ratelimit-reset');
+      const when = reset ? ` Tente novamente após ${new Date(Number(reset) * 1_000).toLocaleTimeString('pt-BR')}.` : '';
+      throw new Error(`Limite da API do GitHub atingido. Configure GITHUB_TOKEN e reinicie o servidor.${when}`);
+    }
     throw new Error(`GitHub respondeu HTTP ${response.status}.`);
   }
   return response.json() as Promise<T>;
+}
+
+function normalizePreviewUrl(value: string | null) {
+  if (!value) return undefined;
+  try { const url = new URL(value); return url.protocol === 'https:' ? url.toString() : undefined; } catch { return undefined; }
+}
+
+async function fetchDelivery(apiBase: string, sha: string) {
+  try {
+    const combined = await githubGet<GitHubCombinedStatus>(`${apiBase}/commits/${sha}/status`);
+    const preview = combined.statuses.find((status) => /vercel|preview|deploy/i.test(`${status.context} ${status.target_url ?? ''}`));
+    const successful = combined.statuses.filter((status) => status.state === 'success').length;
+    const failed = combined.statuses.filter((status) => status.state === 'failure' || status.state === 'error').length;
+    return { checksState: combined.state === 'error' ? 'failure' as const : combined.state, total: combined.statuses.length, successful, failed, previewUrl: normalizePreviewUrl(preview?.target_url ?? null) };
+  } catch {
+    return { checksState: 'unknown' as const, total: 0, successful: 0, failed: 0 };
+  }
 }
 
 export function classifyPriority(file: Pick<GitHubFile, 'filename' | 'patch' | 'additions' | 'deletions'>): 'high' | 'medium' | 'low' {
@@ -67,14 +96,18 @@ export function classifyPriority(file: Pick<GitHubFile, 'filename' | 'patch' | '
   return 'medium';
 }
 
-export async function fetchPullRequestAnalysis(prUrl: string): Promise<Analysis> {
+export async function fetchPullRequestAnalysis(prUrl: string, options: { refresh?: boolean } = {}): Promise<Analysis> {
   const { owner, repo, prNumber } = parsePullRequestUrl(prUrl);
   const repository = `${owner}/${repo}`;
+  const cacheKey = `${repository.toLowerCase()}#${prNumber}`;
+  const cached = cache.get(cacheKey);
+  if (!options.refresh && cached && cached.expiresAt > Date.now()) return cached.value;
   const apiBase = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
   const [pr, files] = await Promise.all([
     githubGet<GitHubPullRequest>(`${apiBase}/pulls/${prNumber}`),
     githubGet<GitHubFile[]>(`${apiBase}/pulls/${prNumber}/files?per_page=${MAX_FILES}`),
   ]);
+  const delivery = await fetchDelivery(apiBase, pr.head.sha);
   const selectedFiles = files.slice(0, MAX_FILES).map((file) => {
     const rawPatch = file.patch ?? '';
     const truncated = rawPatch.length > MAX_PATCH_CHARS;
@@ -92,7 +125,7 @@ export async function fetchPullRequestAnalysis(prUrl: string): Promise<Analysis>
   const limitations: string[] = ['Análise produzida por regras locais. Configure a camada de IA para obter revisão contextual.'];
   if (selectedFiles.some((file) => !file.patchAvailable)) limitations.push('Alguns patches não foram disponibilizados pelo GitHub.');
   if (selectedFiles.some((file) => file.diff.endsWith('patch truncado pelo Cockpit'))) limitations.push('Alguns patches foram truncados por limite de tamanho.');
-  return AnalysisSchema.parse({
+  const result = AnalysisSchema.parse({
     schemaVersion: 2,
     analysisId: `github:${repository}#${pr.number}@${pr.head.sha}`,
     source: 'github',
@@ -109,7 +142,12 @@ export async function fetchPullRequestAnalysis(prUrl: string): Promise<Analysis>
     description: pr.body ?? undefined,
     files: selectedFiles,
     review: buildDeterministicReview(selectedFiles),
+    delivery,
     partial: pr.changed_files > MAX_FILES || selectedFiles.some((file) => !file.patchAvailable),
     limitations,
   });
+  cache.delete(cacheKey);
+  cache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, value: result });
+  while (cache.size > MAX_CACHE_ENTRIES) cache.delete(cache.keys().next().value as string);
+  return result;
 }

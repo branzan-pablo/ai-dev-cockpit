@@ -14,6 +14,7 @@ export const analysis = AnalysisSchema.parse({
   description: 'Cenário seguro para validar a experiência do cockpit sem consultar serviços externos.',
   partial: false, limitations: ['Dados sintéticos; nenhuma consulta ao GitHub foi realizada.'], files,
   review: buildDeterministicReview(files),
+  delivery: { checksState: 'success', total: 3, successful: 3, failed: 0 },
 });
 
 export const explanations: Record<string, { explanation: string; check: string }> = {

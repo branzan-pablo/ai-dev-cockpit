@@ -62,6 +62,21 @@ function Cockpit() {
     } catch { setError('Não foi possível consultar a explicação. Tente novamente.'); } finally { setBusy(false); }
   }
 
+  async function refreshAnalysis() {
+    if (!data?.prUrl || !appRef.current) return;
+    setBusy(true); setError('');
+    try {
+      const result = await appRef.current.callServerTool({ name: 'analyze_pr', arguments: { prUrl: data.prUrl, useAi: data.review.mode === 'ai', refresh: true } });
+      if (result.isError) throw new Error('tool failed');
+      const next = AnalysisSchema.parse(result.structuredContent);
+      setData(next); setSelected(next.files[0]?.path ?? ''); setDetail(null);
+    } catch { setError('Não foi possível atualizar o PR. Verifique o acesso ao GitHub e tente novamente.'); } finally { setBusy(false); }
+  }
+
+  async function openExternal(url: string) {
+    try { await appRef.current?.openLink({ url }); } catch { setError('O cliente bloqueou a abertura do link externo.'); }
+  }
+
   function openFinding(finding: Finding) {
     setSelected(finding.evidence[0]?.filePath ?? ''); setDetail(null); setTab('files');
   }
@@ -70,14 +85,14 @@ function Cockpit() {
 
   const real = data.source === 'github';
   return <main className="shell">
-    <header className="topbar"><div><span className="eyebrow">AI DEV COCKPIT</span><h1>{data.title}</h1><p className="meta">{data.repository} · PR #{data.prNumber} · {data.author ? `por @${data.author} · ` : ''}{data.state}</p></div><div className="headerBadges"><span className={`badge verdict-${data.review.verdict}`}>{verdictLabels[data.review.verdict]}</span><span className={`badge ${real ? 'live' : ''}`}>{real ? 'GitHub real' : 'Demonstração'}</span></div></header>
+    <header className="topbar"><div><span className="eyebrow">AI DEV COCKPIT</span><h1>{data.title}</h1><p className="meta">{data.repository} · PR #{data.prNumber} · {data.author ? `por @${data.author} · ` : ''}{data.state}</p></div><div className="headerActions"><div className="headerBadges"><span className={`badge verdict-${data.review.verdict}`}>{verdictLabels[data.review.verdict]}</span><span className={`badge ${real ? 'live' : ''}`}>{real ? 'GitHub real' : 'Demonstração'}</span></div>{real && <div className="actionRow">{data.delivery.previewUrl && <button className="secondary" onClick={() => void openExternal(data.delivery.previewUrl!)}>Abrir preview</button>}<button className="secondary" disabled={busy} onClick={() => void refreshAnalysis()}>{busy ? 'Atualizando…' : 'Atualizar PR'}</button></div>}</div></header>
     <div className="modebar"><span className={`modeDot ${data.review.mode}`} /> <strong>{data.review.mode === 'ai' ? 'Análise por IA' : 'Análise local'}</strong>{data.review.model && <span> · {data.review.model}</span>}<span className="snapshot">Snapshot {data.headSha.slice(0, 12)}</span></div>
     {error && <p role="alert" className="error">{error}</p>}
     <nav className="tabs" aria-label="Seções do cockpit">{(['overview', 'findings', 'files', 'tests'] as Tab[]).map((item) => <button key={item} aria-current={tab === item ? 'page' : undefined} onClick={() => setTab(item)}>{item === 'overview' ? 'Visão geral' : item === 'findings' ? `Achados (${data.review.findings.length})` : item === 'files' ? `Arquivos (${data.files.length})` : `Testes (${data.review.tests.length})`}</button>)}</nav>
 
     {tab === 'overview' && <div className="overview">
       <section className="hero"><div className={`score verdict-${data.review.verdict}`}><strong>{data.review.riskScore}</strong><span>risco / 100</span></div><div><span className="eyebrow">RESUMO EXECUTIVO</span><h2>{verdictLabels[data.review.verdict]}</h2><p>{data.review.executiveSummary}</p></div></section>
-      <div className="metrics"><section><strong>{data.files.length}</strong><span>arquivos</span></section><section><strong>{counts.critical + counts.high}</strong><span>riscos altos</span></section><section><strong>{data.review.tests.length}</strong><span>testes sugeridos</span></section><section><strong>{data.partial ? 'Parcial' : 'Completa'}</strong><span>cobertura</span></section></div>
+      <div className="metrics"><section><strong>{data.files.length}</strong><span>arquivos</span></section><section><strong>{counts.critical + counts.high}</strong><span>riscos altos</span></section><section><strong>{data.review.tests.length}</strong><span>testes sugeridos</span></section><section><strong className={`ci-${data.delivery.checksState}`}>{data.delivery.checksState === 'success' ? 'Passando' : data.delivery.checksState === 'failure' ? 'Falhando' : data.delivery.checksState === 'pending' ? 'Pendente' : 'Sem status'}</strong><span>CI · {data.delivery.successful}/{data.delivery.total}</span></section></div>
       <div className="overviewGrid"><section><span className="eyebrow">ALTERAÇÃO</span><p>{data.summary}</p>{data.description && <p className="description">{data.description}</p>}<div className="branch"><span>{data.baseRef ?? 'base'}</span><b>←</b><span>{data.headRef ?? 'head'}</span></div></section><section><span className="eyebrow">DISTRIBUIÇÃO</span><div className="kindList">{Object.entries(kindLabels).map(([kind, label]) => { const amount = data.files.filter((item) => item.kind === kind).length; return amount ? <span key={kind}>{label}<strong>{amount}</strong></span> : null; })}</div></section></div>
       {data.limitations.length > 0 && <section className="limitations"><span className="eyebrow">LIMITAÇÕES</span><ul>{data.limitations.map((item) => <li key={item}>{item}</li>)}</ul></section>}
     </div>}

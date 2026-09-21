@@ -9,6 +9,16 @@ import { generateAiReview, isAiConfigured } from './ai-review.js';
 
 export const resourceUri = 'ui://cockpit/dashboard.html';
 const analyses = new Map<string, Analysis>([[analysis.analysisId, analysis]]);
+const MAX_ANALYSES = 20;
+
+function rememberAnalysis(value: Analysis) {
+  analyses.delete(value.analysisId);
+  analyses.set(value.analysisId, value);
+  while (analyses.size > MAX_ANALYSES) {
+    const oldest = analyses.keys().next().value;
+    if (oldest) analyses.delete(oldest); else break;
+  }
+}
 
 function explainFile(current: Analysis, filePath: string) {
   const file = current.files.find((candidate) => candidate.path === filePath);
@@ -32,13 +42,13 @@ export function createServer() {
   registerAppResource(server, 'Cockpit', resourceUri, { mimeType: RESOURCE_MIME_TYPE }, async () => ({ contents: [{ uri: resourceUri, mimeType: RESOURCE_MIME_TYPE, text: await readFile(new URL('../../dist/ui/index.html', import.meta.url), 'utf8') }] }));
   registerAppTool(server, 'analyze_pr', {
     description: 'Analisa um PR e abre o AI Dev Cockpit. A IA é usada quando configurada; useAi=false força as regras locais.',
-    inputSchema: { prUrl: z.string().url().optional(), useAi: z.boolean().optional() },
+    inputSchema: { prUrl: z.string().url().optional(), useAi: z.boolean().optional(), refresh: z.boolean().optional() },
     outputSchema: AnalysisSchema.shape,
     annotations: { readOnlyHint: true },
     _meta: { ui: { resourceUri } },
-  }, async ({ prUrl, useAi }) => {
+  }, async ({ prUrl, useAi, refresh }) => {
     try {
-      let result = prUrl ? await fetchPullRequestAnalysis(prUrl) : analysis;
+      let result = prUrl ? await fetchPullRequestAnalysis(prUrl, { refresh }) : analysis;
       if (prUrl && useAi !== false) {
         if (isAiConfigured()) {
           try {
@@ -51,7 +61,7 @@ export function createServer() {
           result = AnalysisSchema.parse({ ...result, limitations: [...result.limitations, 'Para ativar a IA, configure AI_GATEWAY_API_KEY no ambiente do servidor.'] });
         }
       }
-      analyses.set(result.analysisId, result);
+      rememberAnalysis(result);
       return { content: [{ type: 'text', text: `Cockpit aberto para ${result.repository}#${result.prNumber}. ${result.summary}` }], structuredContent: result };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Falha desconhecida ao consultar o GitHub.';

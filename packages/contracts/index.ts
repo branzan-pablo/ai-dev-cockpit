@@ -35,12 +35,18 @@ export const ReviewSchema = z.object({
   riskScore: z.number().int().min(0).max(100), verdict: z.enum(['approve', 'attention', 'block']), executiveSummary: z.string(),
   findings: z.array(FindingSchema), tests: z.array(TestSuggestionSchema),
 });
+export const DeliverySchema = z.object({
+  checksState: z.enum(['pending', 'success', 'failure', 'unknown']),
+  total: z.number().int().nonnegative(), successful: z.number().int().nonnegative(), failed: z.number().int().nonnegative(),
+  previewUrl: z.string().url().optional(),
+});
 
 export const AnalysisSchema = z.object({
   schemaVersion: z.literal(2), analysisId: z.string(), source: SourceSchema,
   title: z.string(), repository: z.string(), prNumber: z.number().int().positive(), prUrl: z.string().url().optional(), state: z.string(),
   author: z.string().optional(), baseRef: z.string().optional(), headRef: z.string().optional(), headSha: z.string(),
   summary: z.string(), description: z.string().optional(), files: z.array(FileSchema), review: ReviewSchema,
+  delivery: DeliverySchema,
   partial: z.boolean(), limitations: z.array(z.string()),
 });
 export const ExplanationSchema = z.object({
