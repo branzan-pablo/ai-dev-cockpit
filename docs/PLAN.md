@@ -20,10 +20,10 @@ Aceite: pedido na conversa abre a UI; botão realiza chamada real ao servidor; r
 Aceite: fixture identificada e contratos validados, com exemplos de sucesso e erro.
 
 ## M3 — GitHub (1 dia)
-- [ ] Buscar metadados e arquivos do PR, com paginação.
-- [ ] Fixar base SHA e head SHA; obter código no commit analisado.
+- [x] Buscar metadados e até 30 arquivos do PR pela API do GitHub.
+- [x] Fixar a análise ao head SHA retornado pelo GitHub.
 - [ ] Tratar binários, renomeações, patch ausente/truncado e acesso negado.
-- [ ] Limitar arquivos e bytes; informar cobertura parcial.
+- [x] Limitar arquivos e bytes; informar cobertura parcial.
 Aceite: dados reais na UI e erro legível para PR inexistente/sem acesso.
 
 ## M4 — Análise com IA (2–3 dias)

@@ -3,6 +3,14 @@ import assert from 'node:assert/strict';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { AnalysisSchema, ExplanationSchema } from '../packages/contracts/index.js';
+import { classifyPriority, parsePullRequestUrl } from '../apps/mcp-server/github.js';
+
+test('validates GitHub PR URLs and deterministic priorities', () => {
+  assert.deepEqual(parsePullRequestUrl('https://github.com/branzan-pablo/largada/pull/22'), { owner: 'branzan-pablo', repo: 'largada', prNumber: 22 });
+  assert.throws(() => parsePullRequestUrl('https://example.com/a/b/pull/1'));
+  assert.throws(() => parsePullRequestUrl('https://github.com/a/b/issues/1'));
+  assert.equal(classifyPriority({ filename: 'public/pix.svg', patch: '+ viewBox="0 0 NaN NaN"', additions: 1, deletions: 0 }), 'high');
+});
 
 test('stdio: discovery, UI resource, analysis, interaction and invalid input',async()=>{
  const client=new Client({name:'cockpit-test',version:'1.0.0'});
@@ -29,4 +37,34 @@ test('stdio: discovery, UI resource, analysis, interaction and invalid input',as
   const stale=await client.callTool({name:'explain_change',arguments:{analysisId:'unknown',filePath:'src/payment.ts'}});
   assert.equal(stale.isError,true);
  }finally{await client.close();}
+});
+
+test('real PR through GitHub API when REAL_PR_URL is provided', { skip: !process.env.REAL_PR_URL }, async()=>{
+ const client=new Client({name:'cockpit-real-test',version:'1.0.0'});
+ const env=Object.fromEntries(Object.entries({
+  PATH:process.env.PATH,
+  Path:process.env.Path,
+  SystemRoot:process.env.SystemRoot,
+  HTTPS_PROXY:process.env.HTTPS_PROXY,
+  HTTP_PROXY:process.env.HTTP_PROXY,
+  NO_PROXY:process.env.NO_PROXY,
+  https_proxy:process.env.https_proxy,
+  http_proxy:process.env.http_proxy,
+  no_proxy:process.env.no_proxy,
+  ALL_PROXY:process.env.ALL_PROXY,
+  all_proxy:process.env.all_proxy,
+  NODE_USE_ENV_PROXY:process.env.NODE_USE_ENV_PROXY,
+  NODE_EXTRA_CA_CERTS:process.env.NODE_EXTRA_CA_CERTS,
+  GITHUB_TOKEN:process.env.GITHUB_TOKEN,
+ }).filter((entry):entry is [string,string]=>typeof entry[1]==='string'));
+ const transport=new StdioClientTransport({command:process.execPath,args:['--import','tsx','apps/mcp-server/index.ts'],env});
+ try {
+  await client.connect(transport);
+  const result=await client.callTool({name:'analyze_pr',arguments:{prUrl:process.env.REAL_PR_URL}});
+  assert.equal(result.isError,undefined);
+  const analysis=AnalysisSchema.parse(result.structuredContent);
+  assert.equal(analysis.source,'github');
+  assert.ok(analysis.files.length>0);
+  assert.ok(analysis.files.some(file=>file.patchAvailable));
+ } finally { await client.close(); }
 });

@@ -2,7 +2,7 @@
 
 Dashboard interativo dentro de um cliente de IA para analisar Pull Requests, explicar alterações e sugerir testes com MCP Apps.
 
-> Status: primeira fatia implementada com dados sintéticos: `analyze_pr`, interface React e `explain_change`. Build, tipos e integração MCP têm verificação automatizada. Validação visual no VS Code/Copilot ainda pendente. GitHub real, IA e geração de testes continuam no backlog.
+> Status: MCP App validado no VS Code/Copilot. `analyze_pr` consulta PRs públicos reais do GitHub, exibe arquivos/diffs e permite explicar cada alteração por regras determinísticas. IA e geração de testes continuam no backlog.
 
 ## Objetivo
 Demonstrar uma jornada completa: pedir análise de PR na conversa, visualizar uma interface, selecionar um arquivo e solicitar explicações ou testes sem sair do cliente de IA.
@@ -52,9 +52,12 @@ npm run check
 ```
 `check` verifica tipos, gera o HTML da interface e testa o servidor pelo transporte stdio. Não precisa de token GitHub ou chave de IA nesta etapa.
 
-Abra a raiz do projeto no VS Code. A configuração em `.vscode/mcp.json` inicia o servidor local. Em um ambiente compatível com MCP Apps, abra o arquivo de configuração e inicie `ai-dev-cockpit`; habilite suas ferramentas no chat do Copilot. Peça: **Use analyze_pr do ai-dev-cockpit para abrir o PR de demonstração.**
+Abra a raiz do projeto no VS Code. A configuração em `.vscode/mcp.json` inicia o servidor local. Abra o arquivo de configuração, reinicie `ai-dev-cockpit` e habilite suas ferramentas no chat do Copilot. Peça: **Use analyze_pr do ai-dev-cockpit com prUrl https://github.com/owner/repo/pull/123.** Sem `prUrl`, a ferramenta abre o cenário de demonstração.
 
-Selecione um arquivo e clique em **Explicar alteração**. A resposta pré-definida deve aparecer com o horário retornado pelo servidor. Esse horário comprova a consulta, não uma nova análise por IA.
+Selecione um arquivo e clique em **Explicar alteração**. O horário retornado comprova a segunda chamada ao servidor. Em PRs reais, a explicação ainda é determinística e isso aparece no dashboard.
+
+### GitHub
+PRs públicos funcionam sem configuração adicional, sujeitos ao limite anônimo da API. Para repositórios privados ou maior limite, defina `GITHUB_TOKEN` no ambiente do processo — nunca no repositório. Nesta etapa, use um token somente com acesso de leitura ao conteúdo e Pull Requests necessários.
 
 `npm start` inicia o transporte stdio; não abre uma página nem uma porta HTTP. Não digite mensagens nesse terminal. O cliente MCP normalmente inicia o processo automaticamente. Após alterar a interface, execute `npm run build`; após alterar o servidor, reinicie-o no cliente.
 
