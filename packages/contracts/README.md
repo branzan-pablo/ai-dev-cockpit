@@ -1,3 +1,3 @@
-# Contratos compartilhados
+# Contratos
 
-Diretório reservado para tipos e schemas de validação das entradas e saídas MCP. Ver docs/ARCHITECTURE.md. Os contratos descritos são propostas e ainda não estão implementados.
+Schemas Zod de análise e explicação da demonstração. Inputs restritos ao snapshot sintético. Expansão para GitHub real e demais tools pendente.

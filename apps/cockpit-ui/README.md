@@ -1,5 +1,3 @@
 # Cockpit UI
 
-Diretório reservado para React + TypeScript + Vite.
-
-Primeira entrega: receber resultado do host, renderizar resumo e chamar uma tool via botão. Depois: arquivos, diff e testes. Prever loading, erro, análise parcial e resultado desatualizado. Não incluir credenciais no bundle.
+React e MCP Apps SDK. Recebe análise do host e chama explain_change pelo bridge. Vite gera um HTML único em dist/ui. A UI precisa de host compatível; abrir o HTML diretamente não valida a integração.

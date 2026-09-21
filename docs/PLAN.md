@@ -1,15 +1,15 @@
 # Plano de implementação
 
 ## Objetivo e escopo
-Prova de conceito para apresentação de aproximadamente 12 minutos: análise de PR e interface interativa dentro da conversa. GitHub, um provedor de IA e um cliente MCP Apps validado. O repositório contém apenas documentação e estrutura; todos os marcos abaixo estão pendentes.
+Prova de conceito para apresentação de aproximadamente 12 minutos: análise de PR e interface interativa dentro da conversa. GitHub, um provedor de IA e um cliente MCP Apps validado. M1 tem implementação local com fixtures, duas tools e teste de integração stdio. A aceitação no host real permanece pendente; M2–M6 não foram concluídos.
 
 ## M1 — Validar integração com o host (1–2 dias)
 - [ ] Escolher e validar versão/configuração do cliente, inicialmente VS Code com Copilot.
-- [ ] Fixar versões compatíveis dos SDKs, Node e gerenciador de pacotes; registrar lockfile.
-- [ ] Criar servidor MCP e recurso ui://cockpit/dashboard.
-- [ ] Implementar analyze_pr com dados sintéticos e saída estruturada.
-- [ ] Criar UI mínima e botão que chama uma tool e atualiza seu resultado.
-- [ ] Documentar comandos reais de build, execução e conexão.
+- [x] Fixar versões compatíveis dos SDKs, Node e gerenciador de pacotes; registrar lockfile.
+- [x] Criar servidor MCP e recurso ui://cockpit/dashboard.
+- [x] Implementar analyze_pr com dados sintéticos e saída estruturada.
+- [x] Criar UI mínima e botão que chama uma tool e atualiza seu resultado.
+- [x] Documentar comandos reais de build, execução e conexão.
 
 Aceite: pedido na conversa abre a UI; botão realiza chamada real ao servidor; resposta atualiza a interface no cliente escolhido. Uma página isolada no navegador não comprova este marco.
 

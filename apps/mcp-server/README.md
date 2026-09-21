@@ -1,5 +1,3 @@
 # MCP Server
 
-Diretório reservado para implementação em Node.js e TypeScript.
-
-Registrar tools e recurso UI, validar entradas/saídas e manter integrações GitHub e IA no servidor. Primeira entrega: analyze_pr com fixture e uma ação interativa. Nenhum runtime implementado ainda.
+Servidor local stdio. `index.ts` conecta o transporte; `server.ts` registra analyze_pr, explain_change e o HTML da UI. Ambas as tools usam fixtures. Build prévio obrigatório para ler o recurso. GitHub e IA ainda pendentes.
