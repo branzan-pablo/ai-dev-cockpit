@@ -5,7 +5,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { AnalysisSchema, ExplanationSchema, TestPlanSchema } from '../packages/contracts/index.js';
 import { classifyPriority, parsePullRequestUrl } from '../apps/mcp-server/github.js';
 import { buildDeterministicReview, inferFileMetadata } from '../packages/review-engine/index.js';
-import { prepareAiInput } from '../apps/mcp-server/ai-review.js';
+import { prepareAiInput, resolveAiConfiguration } from '../apps/mcp-server/ai-review.js';
 import { analysis as fixtureAnalysis } from '../fixtures/payment.js';
 
 test('validates GitHub PR URLs and deterministic priorities', () => {
@@ -35,6 +35,20 @@ test('prepares bounded AI input and redacts obvious secrets', () => {
   assert.ok(input.files.length > 0);
   assert.equal(JSON.stringify(input).includes('ghp_abcdefghijklmnopqrstuvwxyz123456'), false);
   assert.equal(JSON.stringify(input).includes('[REDACTED'), true);
+});
+
+test('resolves direct and gateway AI providers without exposing credentials', () => {
+  assert.deepEqual(resolveAiConfiguration({ AI_PROVIDER: 'google', GOOGLE_GENERATIVE_AI_API_KEY: 'test' }), {
+    provider: 'google', modelId: 'gemini-3.8-flash', displayModel: 'google/gemini-3.8-flash',
+  });
+  assert.deepEqual(resolveAiConfiguration({ OPENAI_API_KEY: 'test', OPENAI_MODEL: 'gpt-5.6' }), {
+    provider: 'openai', modelId: 'gpt-5.6', displayModel: 'openai/gpt-5.6',
+  });
+  assert.deepEqual(resolveAiConfiguration({ AI_GATEWAY_API_KEY: 'test', AI_MODEL: 'openai/gpt-5.6-luna' }), {
+    provider: 'gateway', modelId: 'openai/gpt-5.6-luna', displayModel: 'openai/gpt-5.6-luna',
+  });
+  assert.throws(() => resolveAiConfiguration({ AI_PROVIDER: 'google' }), /GOOGLE_GENERATIVE_AI_API_KEY/);
+  assert.throws(() => resolveAiConfiguration({ AI_PROVIDER: 'unknown' }), /AI_PROVIDER inválido/);
 });
 
 test('stdio: discovery, UI resource, analysis, interaction and invalid input',async()=>{

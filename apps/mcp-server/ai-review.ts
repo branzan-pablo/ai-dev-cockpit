@@ -1,10 +1,19 @@
 import { createHash } from 'node:crypto';
-import { generateText, Output } from 'ai';
+import { google } from '@ai-sdk/google';
+import { openai } from '@ai-sdk/openai';
+import { generateText, Output, type LanguageModel } from 'ai';
 import { z } from 'zod';
 import type { Analysis, Finding, Review, TestSuggestion } from '../../packages/contracts/index.js';
 
 const MAX_AI_CONTEXT_CHARS = 60_000;
-const DEFAULT_MODEL = 'openai/gpt-5.6-luna';
+const DEFAULT_MODELS = {
+  google: 'gemini-3.8-flash',
+  openai: 'gpt-5.6',
+  gateway: 'openai/gpt-5.6-luna',
+} as const;
+
+export type AiProvider = keyof typeof DEFAULT_MODELS;
+export type AiConfiguration = { provider: AiProvider; modelId: string; displayModel: string };
 
 const AiEvidenceSchema = z.object({ filePath: z.string(), excerpt: z.string().max(500) });
 const AiFindingSchema = z.object({
@@ -40,14 +49,56 @@ export function prepareAiInput(analysis: Analysis) {
   return { repository: analysis.repository, prNumber: analysis.prNumber, title: analysis.title, description: analysis.description?.slice(0, 4_000), baseRef: analysis.baseRef, headRef: analysis.headRef, files };
 }
 
-export function isAiConfigured() { return Boolean(process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN); }
+function normalizeProvider(value: string | undefined): AiProvider | undefined {
+  const provider = value?.trim().toLowerCase();
+  if (!provider) return undefined;
+  if (provider === 'google' || provider === 'openai' || provider === 'gateway') return provider;
+  throw new Error(`AI_PROVIDER inválido: ${value}. Use google, openai ou gateway.`);
+}
+
+export function resolveAiConfiguration(env: NodeJS.ProcessEnv = process.env): AiConfiguration | null {
+  const explicitProvider = normalizeProvider(env.AI_PROVIDER);
+  const provider = explicitProvider
+    ?? (env.GOOGLE_GENERATIVE_AI_API_KEY ? 'google'
+      : env.OPENAI_API_KEY ? 'openai'
+        : env.AI_GATEWAY_API_KEY || env.VERCEL_OIDC_TOKEN ? 'gateway'
+          : undefined);
+  if (!provider) return null;
+
+  if (provider === 'google') {
+    if (!env.GOOGLE_GENERATIVE_AI_API_KEY) throw new Error('GOOGLE_GENERATIVE_AI_API_KEY não configurada para AI_PROVIDER=google.');
+    const modelId = env.GOOGLE_AI_MODEL?.trim() || DEFAULT_MODELS.google;
+    return { provider, modelId, displayModel: `google/${modelId}` };
+  }
+
+  if (provider === 'openai') {
+    if (!env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY não configurada para AI_PROVIDER=openai. O plano ChatGPT não inclui créditos de API.');
+    const modelId = env.OPENAI_MODEL?.trim() || DEFAULT_MODELS.openai;
+    return { provider, modelId, displayModel: `openai/${modelId}` };
+  }
+
+  if (!env.AI_GATEWAY_API_KEY && !env.VERCEL_OIDC_TOKEN) throw new Error('AI_GATEWAY_API_KEY ou VERCEL_OIDC_TOKEN não configurado para AI_PROVIDER=gateway.');
+  const modelId = env.AI_GATEWAY_MODEL?.trim() || env.AI_MODEL?.trim() || DEFAULT_MODELS.gateway;
+  if (!modelId.includes('/')) throw new Error('AI_GATEWAY_MODEL deve usar o formato provider/model.');
+  return { provider, modelId, displayModel: modelId };
+}
+
+function createLanguageModel(config: AiConfiguration): LanguageModel {
+  if (config.provider === 'google') return google(config.modelId);
+  if (config.provider === 'openai') return openai(config.modelId);
+  return config.modelId;
+}
+
+export function isAiConfigured() {
+  try { return resolveAiConfiguration() !== null; } catch { return false; }
+}
 
 export async function generateAiReview(analysis: Analysis): Promise<Review> {
-  if (!isAiConfigured()) throw new Error('AI_GATEWAY_API_KEY não configurada.');
-  const model = process.env.AI_MODEL?.trim() || DEFAULT_MODEL;
+  const config = resolveAiConfiguration();
+  if (!config) throw new Error('Nenhum provedor de IA configurado.');
   const input = prepareAiInput(analysis);
   const result = await generateText({
-    model,
+    model: createLanguageModel(config),
     output: Output.object({ schema: AiReviewOutputSchema }),
     temperature: 0,
     maxOutputTokens: 4_000,
@@ -65,5 +116,5 @@ export async function generateAiReview(analysis: Analysis): Promise<Review> {
   const paths = new Set(analysis.files.map((file) => file.path));
   const findings: Finding[] = output.findings.filter((finding) => finding.evidence.every((item) => paths.has(item.filePath))).map((finding) => ({ ...finding, id: stableId('ai', `${finding.title}:${finding.evidence[0]?.filePath}`), source: 'ai' as const }));
   const tests: TestSuggestion[] = output.tests.map((test) => ({ ...test, relatedFiles: test.relatedFiles.filter((path) => paths.has(path)), id: stableId('ai-test', `${test.title}:${test.relatedFiles.join(',')}`), source: 'ai' as const }));
-  return { mode: 'ai', model, generatedAt: new Date().toISOString(), riskScore: output.riskScore, verdict: output.verdict, executiveSummary: output.executiveSummary, findings, tests };
+  return { mode: 'ai', model: config.displayModel, generatedAt: new Date().toISOString(), riskScore: output.riskScore, verdict: output.verdict, executiveSummary: output.executiveSummary, findings, tests };
 }

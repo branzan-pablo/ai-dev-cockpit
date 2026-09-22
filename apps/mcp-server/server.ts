@@ -58,7 +58,7 @@ export function createServer() {
             result = AnalysisSchema.parse({ ...result, limitations: [...result.limitations, `A IA falhou (${reason.slice(0, 160)}); exibindo análise local.`] });
           }
         } else {
-          result = AnalysisSchema.parse({ ...result, limitations: [...result.limitations, 'Para ativar a IA, configure AI_GATEWAY_API_KEY no ambiente do servidor.'] });
+          result = AnalysisSchema.parse({ ...result, limitations: [...result.limitations, 'Para ativar a IA, configure AI_PROVIDER e a chave do provedor (Google, OpenAI ou Vercel AI Gateway).'] });
         }
       }
       rememberAnalysis(result);
