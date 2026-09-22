@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0
+
+- Google Gemini direto como caminho recomendado para análise contextual.
+- OpenAI direta e Vercel AI Gateway como alternativas opcionais.
+- Seleção por `AI_PROVIDER`, modelos específicos por provedor e autodetecção por chave.
+- Documentação clara sobre a separação entre ChatGPT Plus e API da OpenAI.
+
 ## 0.4.0
 
 - Dashboard adaptativo com visão geral, achados, arquivos e testes.

@@ -6,7 +6,7 @@
 2. O servidor valida estritamente `https://github.com/{owner}/{repo}/pull/{number}`.
 3. A integração busca metadados, arquivos e commit statuses do GitHub.
 4. O review engine classifica arquivos e produz um fallback determinístico.
-5. Se o AI Gateway estiver configurado, a revisão contextual substitui o review local; qualquer falha preserva o fallback.
+5. Se um provedor de IA estiver configurado, a revisão contextual substitui o review local; qualquer falha preserva o fallback.
 6. A resposta estruturada é validada e associada ao `head SHA` em um cache LRU na memória.
 7. O host carrega `ui://cockpit/dashboard.html`; a UI renderiza o snapshot e chama tools adicionais pelo host.
 
@@ -31,7 +31,10 @@
 
 ## IA e confiança
 
-- Modelo padrão: `openai/gpt-5.6-luna` via AI SDK e Vercel AI Gateway; configurável por ambiente.
+- Provedores: Google Gemini direto, OpenAI direta ou Vercel AI Gateway.
+- `AI_PROVIDER` seleciona o provedor. Sem seleção explícita, a detecção prioriza Google, depois OpenAI e então Gateway.
+- Padrão recomendado para desenvolvimento: `google/gemini-3.8-flash` com `GOOGLE_GENERATIVE_AI_API_KEY`.
+- A assinatura ChatGPT não autentica a API da OpenAI; `OPENAI_API_KEY` exige uma conta de API separada.
 - Saída: `generateText` com `Output.object` e schema Zod.
 - Temperatura 0, timeout total de 45 segundos e máximo de 4.000 tokens de saída.
 - No máximo 60.000 caracteres de patches entram no prompt.

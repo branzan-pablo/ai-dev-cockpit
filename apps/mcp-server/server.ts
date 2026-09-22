@@ -38,7 +38,7 @@ function explainFile(current: Analysis, filePath: string) {
 }
 
 export function createServer() {
-  const server = new McpServer({ name: 'ai-dev-cockpit', version: '0.4.0' });
+  const server = new McpServer({ name: 'ai-dev-cockpit', version: '0.5.0' });
   registerAppResource(server, 'Cockpit', resourceUri, { mimeType: RESOURCE_MIME_TYPE }, async () => ({ contents: [{ uri: resourceUri, mimeType: RESOURCE_MIME_TYPE, text: await readFile(new URL('../../dist/ui/index.html', import.meta.url), 'utf8') }] }));
   registerAppTool(server, 'analyze_pr', {
     description: 'Analisa um PR e abre o AI Dev Cockpit. A IA é usada quando configurada; useAi=false força as regras locais.',

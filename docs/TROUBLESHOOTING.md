@@ -17,7 +17,26 @@ Confirme que está no VS Code/Copilot com MCP Apps habilitado e que a tool usada
 
 ## A análise aparece como local
 
-Crie `.env`, preencha `AI_GATEWAY_API_KEY` e reinicie o servidor. O topo do dashboard informa **Análise por IA** e o modelo quando a chamada foi bem-sucedida. Se a IA falhar, a limitação exibirá o motivo resumido e o fallback local.
+Crie `.env`, selecione um provedor e reinicie o servidor. Para Google:
+
+```dotenv
+AI_PROVIDER=google
+GOOGLE_GENERATIVE_AI_API_KEY=sua-chave
+```
+
+O topo do dashboard informa **Análise por IA** e o modelo quando a chamada foi bem-sucedida. Se a IA falhar, a limitação exibirá o motivo resumido e o fallback local.
+
+## Tenho ChatGPT Plus; por que preciso de outra chave?
+
+O servidor MCP não pode reutilizar sua sessão ou assinatura do ChatGPT. ChatGPT e API da OpenAI têm autenticação e faturamento separados. Use Gemini direto para começar ou configure `OPENAI_API_KEY` de uma conta da API da OpenAI.
+
+## A Vercel está pedindo cartão
+
+A Vercel só é usada quando `AI_PROVIDER=gateway` ou quando apenas a chave do Gateway está disponível. Para removê-la do fluxo, configure `AI_PROVIDER=google`, adicione `GOOGLE_GENERATIVE_AI_API_KEY`, remova ou comente a seleção do Gateway e reinicie o MCP.
+
+## Provedor configurado, mas a chave não foi encontrada
+
+Confira se a chave corresponde ao provedor: `GOOGLE_GENERATIVE_AI_API_KEY`, `OPENAI_API_KEY` ou `AI_GATEWAY_API_KEY`. Não coloque aspas extras, reinicie o servidor e execute novamente com `refresh: true`.
 
 ## PR privado não é encontrado
 

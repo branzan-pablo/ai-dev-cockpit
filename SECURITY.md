@@ -12,7 +12,9 @@ Tokens permanecem no processo do servidor, via `.env` ignorado. Use menor privil
 
 ## Uso de IA
 
-Quando a IA está habilitada, trechos redigidos dos diffs são enviados ao modelo configurado no Vercel AI Gateway. Confirme políticas da organização e do provedor antes de analisar código privado. A redação reduz riscos, mas não garante detecção de todos os segredos.
+Quando a IA está habilitada, trechos redigidos dos diffs são enviados ao provedor selecionado: Google, OpenAI ou Vercel AI Gateway. Confirme políticas da organização e do provedor antes de analisar código privado. A redação reduz riscos, mas não garante detecção de todos os segredos.
+
+Não reutilize cookies, sessões ou credenciais do ChatGPT. Use somente chaves oficiais de API, restritas ao projeto quando o provedor permitir.
 
 ## Fora da garantia
 
