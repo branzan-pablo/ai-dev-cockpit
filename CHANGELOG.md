@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1
+
+- Schema estruturado compatível com o subconjunto aceito pela API Gemini.
+- Validação completa da resposta de IA mantida localmente com Zod.
+- Diagnóstico seguro de falhas do provedor no terminal do servidor MCP.
+
 ## 0.5.0
 
 - Google Gemini direto como caminho recomendado para análise contextual.

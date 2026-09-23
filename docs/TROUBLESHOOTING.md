@@ -34,6 +34,12 @@ O servidor MCP não pode reutilizar sua sessão ou assinatura do ChatGPT. ChatGP
 
 A Vercel só é usada quando `AI_PROVIDER=gateway` ou quando apenas a chave do Gateway está disponível. Para removê-la do fluxo, configure `AI_PROVIDER=google`, adicione `GOOGLE_GENERATIVE_AI_API_KEY`, remova ou comente a seleção do Gateway e reinicie o MCP.
 
+### O Gemini retorna `Request contains an invalid argument`
+
+Atualize para a versão `0.5.1` ou posterior. Versões anteriores enviavam ao Gemini restrições de JSON Schema que não fazem parte do subconjunto aceito pela API. A partir da `0.5.1`, o servidor envia um schema compatível e aplica os limites completos localmente com Zod.
+
+Depois da atualização, reinicie o servidor MCP. Se ainda houver falha, consulte o terminal **Output > MCP: ai-dev-cockpit**: o servidor registra provedor, modelo, status HTTP e corpo de erro sanitizado, sem registrar a chave nem o conteúdo do PR.
+
 ## Provedor configurado, mas a chave não foi encontrada
 
 Confira se a chave corresponde ao provedor: `GOOGLE_GENERATIVE_AI_API_KEY`, `OPENAI_API_KEY` ou `AI_GATEWAY_API_KEY`. Não coloque aspas extras, reinicie o servidor e execute novamente com `refresh: true`.
