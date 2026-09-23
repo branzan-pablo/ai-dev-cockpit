@@ -78,6 +78,8 @@ O servidor lê `.env` pelo próprio Node ao ser iniciado pela configuração ver
 
 Diagnóstico direto: `npm run doctor:ai` imprime os modelos efetivos e faz uma revisão de dados sintéticos usando a mesma integração do MCP. Consome cota/créditos da API; não envia um PR real. Um sucesso termina com `ok: true` e o modelo que respondeu. A recuperação tem no máximo três chamadas totais e 45 segundos, sem multiplicar retries por modelo. Ela não garante disponibilidade do provedor. Logs e limitações distinguem cota, autenticação, indisponibilidade e resposta inválida, sem expor o conteúdo bruto da API.
 
+Na `0.5.3`, cada tentativa tem no máximo 20 segundos (ou o saldo restante dos 45 segundos). Timeout também permite trocar para uma alternativa configurada. Para isolar a chamada básica, execute `npm run doctor:ai -- --probe`: envia apenas "Responda somente OK.", sem schema ou conteúdo de PR. `api_probe` com sucesso confirma uma resposta simples; não valida a revisão completa. As duas formas de diagnóstico podem consumir créditos/cota.
+
 ### Exemplos de provedor
 
 Google direto, recomendado para o primeiro teste:

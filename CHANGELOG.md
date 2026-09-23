@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.3
+
+- Limite independente de 20 segundos por chamada dentro dos 45 segundos totais: um modelo lento não consome sozinho todo o prazo.
+- Timeout tenta o modelo alternativo configurado, aborta a requisição anterior e não duplica o erro final.
+- Logs incluem limite e duração da tentativa.
+- `doctor:ai -- --probe` testa geração mínima sem PR nem schema, para separar latência da chamada simples da revisão estruturada.
+- Regressão com transporte HTTP simulado que fica pendente e só encerra por abort; alternativa validada pelo SDK real.
+
 ## 0.5.2
 
 - Recuperação limitada a três chamadas/45 segundos, com backoff, jitter e Retry-After.

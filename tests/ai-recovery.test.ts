@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { APICallError, RetryError } from 'ai';
 import { analysis } from '../fixtures/payment.js';
-import { applyAiReview, generateAiReview, resolveModelCandidates } from '../apps/mcp-server/ai-review.js';
+import { applyAiReview, generateAiReview, probeAiProvider, resolveModelCandidates } from '../apps/mcp-server/ai-review.js';
 import { AiRecoveryError, classifyAiError, withAiRecovery } from '../apps/mcp-server/ai-recovery.js';
 
 const env = { AI_PROVIDER: 'google', GOOGLE_GENERATIVE_AI_API_KEY: 'test-key', GOOGLE_AI_MODEL: 'primary', GOOGLE_AI_FALLBACK_MODELS: 'secondary' };
@@ -14,20 +14,74 @@ function apiError(status: number, message = 'provider error', headers?: Record<s
   return new APICallError({ statusCode: status, message, url: 'https://example.test', requestBodyValues: {}, responseHeaders: headers });
 }
 
-function mockProvider(responses: Array<{ status?: number; message?: string; output?: unknown }>) {
+function mockProvider(responses: Array<{ status?: number; message?: string; output?: unknown; stall?: boolean }>) {
   const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const signals: Array<AbortSignal | null | undefined> = [];
   const provider = createGoogleGenerativeAI({ apiKey: 'fake-test-key', fetch: async (url, options) => {
+    signals.push(options?.signal);
     calls.push({ url: String(url), body: JSON.parse(String(options?.body)) });
     const response = responses[calls.length - 1];
     assert.ok(response, 'Unexpected additional HTTP attempt');
+    if (response.stall) return new Promise<Response>((_resolve, reject) => {
+      if (options?.signal?.aborted) { reject(options.signal.reason); return; }
+      options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), { once: true });
+    });
     const status = response.status ?? 200;
     return new Response(JSON.stringify(status === 200 ? {
       candidates: [{ content: { role: 'model', parts: [{ text: JSON.stringify(response.output ?? validOutput) }] }, finishReason: 'STOP' }],
       usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 10, totalTokenCount: 20 },
     } : { error: { code: status, status: status === 503 ? 'UNAVAILABLE' : 'INVALID_ARGUMENT', message: response.message ?? 'This model is currently experiencing high demand' } }), { status, headers: { 'content-type': 'application/json' } });
   } });
-  return { calls, modelFactory: (config: { modelId: string }) => provider(config.modelId) };
+  return { calls, signals, modelFactory: (config: { modelId: string }) => provider(config.modelId) };
 }
+
+test('real SDK: stalled primary is aborted and secondary succeeds within global budget', async () => {
+  const mock = mockProvider([{ stall: true }, {}]);
+  const events: Record<string, unknown>[] = [];
+  const result = await generateAiReview(analysis, { env, ...mock, wait, log: e => events.push(e), budgetMs: 5000, attemptTimeoutMs: 250 });
+  assert.equal(result.model, 'google/secondary');
+  assert.equal(mock.calls.length, 2);
+  assert.equal(mock.signals[0]?.aborted, true);
+  assert.equal(mock.signals[1]?.aborted, false);
+  const failures = events.filter(e => e.event === 'failure');
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0].kind, 'timeout');
+  assert.ok(Number(failures[0].elapsedMs) >= 20);
+});
+
+test('global timeout is reported once, not as duplicate model attempts', async () => {
+  const mock = mockProvider([{ stall: true }]);
+  await assert.rejects(generateAiReview(analysis, { env, ...mock, wait, log, budgetMs: 20, attemptTimeoutMs: 1000 }), error => {
+    assert.ok(error instanceof AiRecoveryError);
+    assert.equal(error.attempts.length, 1);
+    assert.equal(error.deadlineReached, true);
+    return true;
+  });
+  assert.equal(mock.calls.length, 1);
+});
+
+test('per-attempt timeout bounds even a transport that ignores abort', async () => {
+  const calls: string[] = [];
+  const result = await withAiRecovery(async model => {
+    calls.push(model);
+    return model === 'a' ? new Promise<string>(() => {}) : 'ok';
+  }, { models: ['a', 'b'], attemptTimeoutMs: 20, budgetMs: 5000, wait, log });
+  assert.equal(result.model, 'b');
+  assert.deepEqual(calls, ['a', 'b']);
+});
+
+test('probe sends only a minimal prompt, no schema or PR content', async () => {
+  const mock = mockProvider([{}]);
+  const result = await probeAiProvider({ env, ...mock, wait, log });
+  assert.equal(result.mode, 'api_probe');
+  assert.equal(mock.calls.length, 1);
+  const config = mock.calls[0].body.generationConfig as Record<string, unknown>;
+  assert.equal(config.responseJsonSchema, undefined);
+  assert.equal(config.responseMimeType, undefined);
+  const body = JSON.stringify(mock.calls[0].body);
+  assert.ok(body.includes('Responda somente OK.'));
+  assert.equal(body.includes('untrusted_pr_json'), false);
+});
 
 test('real SDK request: 503 primary → valid secondary response with actual model provenance', async () => {
   const mock = mockProvider([{ status: 503 }, {}]);

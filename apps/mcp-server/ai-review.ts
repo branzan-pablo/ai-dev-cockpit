@@ -160,7 +160,26 @@ type ReviewOptions = {
   modelFactory?: (config: AiConfiguration) => LanguageModel;
   wait?: (ms: number, signal: AbortSignal) => Promise<void>;
   log?: (event: Record<string, unknown>) => void;
+  budgetMs?: number;
+  attemptTimeoutMs?: number;
 };
+
+export async function probeAiProvider(options: ReviewOptions = {}) {
+  const config = resolveAiConfiguration(options.env);
+  if (!config) throw new Error('Nenhum provedor de IA configurado.');
+  const recovered = await withAiRecovery(async (modelId, signal) => {
+    const result = await generateText({
+      model: (options.modelFactory ?? createLanguageModel)({ ...config, modelId }),
+      prompt: 'Responda somente OK.',
+      maxOutputTokens: 1024,
+      maxRetries: 0,
+      abortSignal: signal,
+    });
+    if (!result.text.trim()) throw new Error('Empty probe response');
+    return true;
+  }, { ...options, models: resolveModelCandidates(config, options.env) });
+  return { ok: true, mode: 'api_probe', model: recovered.model };
+}
 
 export function isAiConfigured() {
   try { return resolveAiConfiguration() !== null; } catch { return false; }
@@ -190,7 +209,7 @@ export async function generateAiReview(analysis: Analysis, options: ReviewOption
       prompt: `Revise o Pull Request delimitado abaixo. Considere impacto funcional, segurança, confiabilidade, acessibilidade e cobertura de testes.\n<untrusted_pr_json>\n${JSON.stringify(input)}\n</untrusted_pr_json>`,
     });
     return result.output;
-  }, { models: resolveModelCandidates(config, options.env), wait: options.wait, log: options.log });
+  }, { ...options, models: resolveModelCandidates(config, options.env) });
   const output = recovered.value;
   const paths = new Set(analysis.files.map((file) => file.path));
   const findings: Finding[] = output.findings.filter((finding) => finding.evidence.every((item) => paths.has(item.filePath))).map((finding) => ({ ...finding, id: stableId('ai', `${finding.title}:${finding.evidence[0]?.filePath}`), source: 'ai' as const }));

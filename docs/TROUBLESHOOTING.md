@@ -45,6 +45,7 @@ Na versão `0.5.2`, o canal de saída do servidor MCP registra somente modelo, t
 A mensagem de alta demanda indica indisponibilidade do provedor. Na `0.5.1`, o SDK repetia o mesmo modelo três vezes e o servidor retornava regras locais, ainda com a orientação incorreta de configurar IA. A `0.5.2` elimina essa orientação, classifica o erro (inclusive dentro de `RetryError.lastError`) e permite alternativas explícitas em `GOOGLE_AI_FALLBACK_MODELS`.
 
 - Máximo de três chamadas no total, com prazo global de 45 segundos e espera exponencial com jitter.
+- Desde `0.5.3`, limite de 20 segundos por tentativa; timeout aborta a chamada e permite tentar uma alternativa dentro do prazo restante.
 - HTTP 503/500/502/504: tenta o próximo modelo configurado; sem alternativa, repete o atual.
 - HTTP 429: respeita Retry-After e repete o mesmo modelo; não troca para contornar cota.
 - HTTP 400/401/403: não repete. Exceção: mensagem explícita de modelo removido/inexistente permite tentar uma alternativa configurada.
@@ -52,6 +53,12 @@ A mensagem de alta demanda indica indisponibilidade do provedor. Na `0.5.1`, o S
 - Se todos falharem, o dashboard permanece local e lista modelos/status tentados. Não é falha de renderização.
 
 Execute `npm run doctor:ai` após atualizar. O comando imprime versão, provedor e modelos efetivos e testa dados sintéticos através da mesma integração. Pode consumir créditos/cota. Não consulta GitHub nem envia código de PR real. Se falhar, compartilhe somente a saída segura desse comando. Não há promessa de que um modelo alternativo estará disponível ou terá acesso liberado na sua conta.
+
+## Timeout na primeira tentativa e alternativa não chamada
+
+A `0.5.2` tinha apenas um prazo global: uma chamada pendente podia consumir os 45 segundos inteiros e impedir a alternativa. Além disso, timeout não selecionava o próximo modelo e podia aparecer duas vezes no erro. Isso foi corrigido na `0.5.3` com limite por tentativa, troca em timeout e erro sem duplicação. Os logs exibem `timeoutMs` e `elapsedMs`.
+
+Um timeout sem status HTTP não comprova alta demanda, chave inválida ou problema no schema. Execute `npm run doctor:ai -- --probe` para testar apenas uma resposta curta sem revisão estruturada. Se funcionar, execute `npm run doctor:ai` para comparar com a revisão. Se ambos expirarem, ainda é preciso investigar latência/conectividade/API no ambiente local; a mensagem sozinha não identifica em qual parte houve demora. O cancelamento local não garante que o provedor deixe de cobrar uma geração já iniciada.
 
 ## Provedor configurado, mas a chave não foi encontrada
 
