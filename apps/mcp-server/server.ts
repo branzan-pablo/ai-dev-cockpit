@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { analysis, explanations } from '../../fixtures/payment.js';
 import { AnalysisSchema, ExplanationSchema, TestPlanSchema, type Analysis } from '../../packages/contracts/index.js';
 import { fetchPullRequestAnalysis } from './github.js';
-import { generateAiReview, isAiConfigured } from './ai-review.js';
+import { applyAiReview } from './ai-review.js';
 
 export const resourceUri = 'ui://cockpit/dashboard.html';
 const analyses = new Map<string, Analysis>([[analysis.analysisId, analysis]]);
@@ -38,7 +38,7 @@ function explainFile(current: Analysis, filePath: string) {
 }
 
 export function createServer() {
-  const server = new McpServer({ name: 'ai-dev-cockpit', version: '0.5.1' });
+  const server = new McpServer({ name: 'ai-dev-cockpit', version: '0.5.2' });
   registerAppResource(server, 'Cockpit', resourceUri, { mimeType: RESOURCE_MIME_TYPE }, async () => ({ contents: [{ uri: resourceUri, mimeType: RESOURCE_MIME_TYPE, text: await readFile(new URL('../../dist/ui/index.html', import.meta.url), 'utf8') }] }));
   registerAppTool(server, 'analyze_pr', {
     description: 'Analisa um PR e abre o AI Dev Cockpit. A IA é usada quando configurada; useAi=false força as regras locais.',
@@ -49,18 +49,7 @@ export function createServer() {
   }, async ({ prUrl, useAi, refresh }) => {
     try {
       let result = prUrl ? await fetchPullRequestAnalysis(prUrl, { refresh }) : analysis;
-      if (prUrl && useAi !== false) {
-        if (isAiConfigured()) {
-          try {
-            result = AnalysisSchema.parse({ ...result, review: await generateAiReview(result), limitations: result.limitations.filter((item) => !item.includes('Configure a camada de IA')) });
-          } catch (error) {
-            const reason = error instanceof Error ? error.message : 'erro desconhecido';
-            result = AnalysisSchema.parse({ ...result, limitations: [...result.limitations, `A IA falhou (${reason.slice(0, 160)}); exibindo análise local.`] });
-          }
-        } else {
-          result = AnalysisSchema.parse({ ...result, limitations: [...result.limitations, 'Para ativar a IA, configure AI_PROVIDER e a chave do provedor (Google, OpenAI ou Vercel AI Gateway).'] });
-        }
-      }
+      if (prUrl) result = AnalysisSchema.parse(await applyAiReview(result, useAi));
       rememberAnalysis(result);
       return { content: [{ type: 'text', text: `Cockpit aberto para ${result.repository}#${result.prNumber}. ${result.summary}` }], structuredContent: result };
     } catch (error) {

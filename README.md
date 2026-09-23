@@ -68,12 +68,15 @@ Sem `prUrl`, `analyze_pr` abre o cenário sintético de demonstração. Use `use
 | `AI_PROVIDER` | Não | `google`, `openai` ou `gateway`. Se omitido, o servidor detecta pelas chaves disponíveis. |
 | `GOOGLE_GENERATIVE_AI_API_KEY` | Para Google | Chave criada no Google AI Studio. |
 | `GOOGLE_AI_MODEL` | Não | Modelo direto do Google; padrão `gemini-3.8-flash`. |
+| `GOOGLE_AI_FALLBACK_MODELS` | Não | Até dois modelos Google alternativos, separados por vírgula; vazio por padrão. Usados somente em indisponibilidade ou modelo removido. |
 | `OPENAI_API_KEY` | Para OpenAI | Chave da API da OpenAI, cobrada separadamente do ChatGPT. |
 | `OPENAI_MODEL` | Não | Modelo direto da OpenAI; padrão `gpt-5.6`. |
 | `AI_GATEWAY_API_KEY` | Para Gateway | Chave opcional do Vercel AI Gateway. |
 | `AI_GATEWAY_MODEL` | Não | Modelo do Gateway; padrão `openai/gpt-5.6-luna`. |
 
 O servidor lê `.env` pelo próprio Node ao ser iniciado pela configuração versionada do VS Code. Após alterar `.env`, reinicie o servidor MCP.
+
+Diagnóstico direto: `npm run doctor:ai` imprime os modelos efetivos e faz uma revisão de dados sintéticos usando a mesma integração do MCP. Consome cota/créditos da API; não envia um PR real. Um sucesso termina com `ok: true` e o modelo que respondeu. A recuperação tem no máximo três chamadas totais e 45 segundos, sem multiplicar retries por modelo. Ela não garante disponibilidade do provedor. Logs e limitações distinguem cota, autenticação, indisponibilidade e resposta inválida, sem expor o conteúdo bruto da API.
 
 ### Exemplos de provedor
 

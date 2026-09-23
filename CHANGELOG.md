@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.2
+
+- Recuperação limitada a três chamadas/45 segundos, com backoff, jitter e Retry-After.
+- Modelos Google alternativos configuráveis, sem trocar de provedor nem contornar cotas.
+- Tratamento de RetryError.lastError e classificação segura por status HTTP.
+- Fallback local não recomenda reconfigurar IA quando o provedor está indisponível.
+- Logs apenas de metadados; remoção de corpos/mensagens brutos que poderiam conter segredos.
+- Comando doctor:ai valida a mesma integração com dados sintéticos.
+- Testes HTTP simulados através do SDK real para recuperação, validação, prazo e segurança.
+
 ## 0.5.1
 
 - Schema estruturado compatível com o subconjunto aceito pela API Gemini.

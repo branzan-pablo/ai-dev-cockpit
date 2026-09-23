@@ -26,7 +26,7 @@ function Cockpit() {
   const [fileQuery, setFileQuery] = useState('');
 
   useEffect(() => {
-    const app = new App({ name: 'AI Dev Cockpit', version: '0.5.1' });
+    const app = new App({ name: 'AI Dev Cockpit', version: '0.5.2' });
     appRef.current = app;
     let disposed = false;
     app.ontoolresult = (result) => {

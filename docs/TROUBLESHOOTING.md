@@ -17,7 +17,7 @@ Confirme que está no VS Code/Copilot com MCP Apps habilitado e que a tool usada
 
 ## A análise aparece como local
 
-Crie `.env`, selecione um provedor e reinicie o servidor. Para Google:
+Leia primeiro a limitação exibida. "Análise local" indica que nenhuma revisão de IA foi aceita, não necessariamente falta de configuração. Se a IA não estiver configurada, crie `.env`, selecione um provedor e reinicie o servidor. Para Google:
 
 ```dotenv
 AI_PROVIDER=google
@@ -36,9 +36,22 @@ A Vercel só é usada quando `AI_PROVIDER=gateway` ou quando apenas a chave do G
 
 ### O Gemini retorna `Request contains an invalid argument`
 
-Atualize para a versão `0.5.1` ou posterior. Versões anteriores enviavam ao Gemini restrições de JSON Schema que não fazem parte do subconjunto aceito pela API. A partir da `0.5.1`, o servidor envia um schema compatível e aplica os limites completos localmente com Zod.
+Esse erro genérico não prova uma causa específica. Confira modelo e parâmetros. A versão `0.5.1` simplificou o schema enviado ao Google como mitigação de possíveis incompatibilidades, mantendo validação local completa com Zod. Isso não corrige erros de capacidade, permissão ou cota.
 
-Depois da atualização, reinicie o servidor MCP. Se ainda houver falha, consulte o terminal **Output > MCP: ai-dev-cockpit**: o servidor registra provedor, modelo, status HTTP e corpo de erro sanitizado, sem registrar a chave nem o conteúdo do PR.
+Na versão `0.5.2`, o canal de saída do servidor MCP registra somente modelo, tentativa, status HTTP e categoria. Corpos e mensagens brutos não são registrados, pois podem conter conteúdo sensível. Nunca publique `.env`, chaves ou cabeçalhos de autenticação.
+
+## Alta demanda / HTTP 503 / Failed after 3 attempts
+
+A mensagem de alta demanda indica indisponibilidade do provedor. Na `0.5.1`, o SDK repetia o mesmo modelo três vezes e o servidor retornava regras locais, ainda com a orientação incorreta de configurar IA. A `0.5.2` elimina essa orientação, classifica o erro (inclusive dentro de `RetryError.lastError`) e permite alternativas explícitas em `GOOGLE_AI_FALLBACK_MODELS`.
+
+- Máximo de três chamadas no total, com prazo global de 45 segundos e espera exponencial com jitter.
+- HTTP 503/500/502/504: tenta o próximo modelo configurado; sem alternativa, repete o atual.
+- HTTP 429: respeita Retry-After e repete o mesmo modelo; não troca para contornar cota.
+- HTTP 400/401/403: não repete. Exceção: mensagem explícita de modelo removido/inexistente permite tentar uma alternativa configurada.
+- JSON inválido: não é aceito como revisão de IA; mantém regras locais.
+- Se todos falharem, o dashboard permanece local e lista modelos/status tentados. Não é falha de renderização.
+
+Execute `npm run doctor:ai` após atualizar. O comando imprime versão, provedor e modelos efetivos e testa dados sintéticos através da mesma integração. Pode consumir créditos/cota. Não consulta GitHub nem envia código de PR real. Se falhar, compartilhe somente a saída segura desse comando. Não há promessa de que um modelo alternativo estará disponível ou terá acesso liberado na sua conta.
 
 ## Provedor configurado, mas a chave não foi encontrada
 
@@ -59,6 +72,8 @@ O botão só existe quando um commit status contém uma URL HTTPS associada a Ve
 ## Alterei `.env` e nada mudou
 
 Variáveis são lidas quando o processo Node inicia. Reinicie `ai-dev-cockpit` pelo controle sobre `.vscode/mcp.json`.
+
+Variáveis já definidas no ambiente do processo podem prevalecer sobre `.env`. Confira os modelos impressos pelo `doctor:ai` e pelos logs de tentativa do MCP; não basta verificar o texto do arquivo. Uma análise antiga no chat não se atualiza sozinha: faça uma nova chamada com `refresh: true`.
 
 ## Diagnóstico local
 
