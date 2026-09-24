@@ -1,0 +1,48 @@
+export const demoAnalysis = {
+  schemaVersion: 3,
+  analysisId: 'demo-payment-v3',
+  source: 'fixture',
+  title: 'Retry no processamento de pagamentos',
+  repository: 'demo/payment-service',
+  prNumber: 142,
+  state: 'demo',
+  author: 'demo-user',
+  baseRef: 'main',
+  headRef: 'feat/payment-retry',
+  headSha: 'fixture-v3',
+  summary: '3 arquivos alterados · +4 / −3 · fluxo crítico de cobrança',
+  description: 'Cenário sintético para revisar idempotência, retries e clareza da interface de pagamento.',
+  partial: false,
+  limitations: ['Dados sintéticos; nenhuma consulta ao GitHub foi realizada.'],
+  files: [
+    { path: 'src/payment.ts', status: 'modified', priority: 'high', kind: 'source', language: 'TypeScript', additions: 2, deletions: 1, diff: '@@ -41,1 +41,2 @@\n- await charge(order.id);\n+ const key = crypto.randomUUID();\n+ await charge(order.id, key);', patchAvailable: true },
+    { path: 'src/retry.ts', status: 'modified', priority: 'medium', kind: 'source', language: 'TypeScript', additions: 1, deletions: 1, diff: '@@ -18,1 +18,1 @@\n- if (error.transient) retry();\n+ retry();', patchAvailable: true },
+    { path: 'src/button.ts', status: 'modified', priority: 'low', kind: 'source', language: 'TypeScript', additions: 1, deletions: 1, diff: '@@ -9,1 +9,1 @@\n- label = "Pagar";\n+ label = "Confirmar pagamento";', patchAvailable: true },
+  ],
+  review: {
+    mode: 'ai', model: 'google/gemini-demo', generatedAt: '2026-09-23T12:00:00.000Z', riskScore: 29, verdict: 'attention',
+    executiveSummary: 'A alteração simplifica retries, mas cria uma nova chave de idempotência a cada tentativa. Isso pode transformar uma repetição do mesmo pagamento em operações distintas.',
+    riskFactors: [
+      { label: 'Idempotência', contribution: 25, reason: 'A identidade da operação muda dentro do fluxo de cobrança.' },
+      { label: 'Arquivo prioritário', contribution: 4, reason: 'O processamento de pagamentos foi alterado.' },
+    ],
+    findings: [{
+      id: 'demo-idempotency', severity: 'high', category: 'reliability', title: 'Nova chave pode impedir deduplicação entre tentativas',
+      description: 'A chave é criada imediatamente antes da chamada de cobrança, portanto cada retry pode ser interpretado como uma operação nova.',
+      recommendation: 'Crie a chave por pedido e reutilize-a em todas as tentativas da mesma operação.', confidence: 'high', source: 'ai',
+      applicableRules: ['docs/engineering/payments.md', '.agents/skills/payment-review/SKILL.md'],
+      evidence: [{ filePath: 'src/payment.ts', line: 42, excerpt: '+ const key = crypto.randomUUID();' }],
+    }],
+    tests: [{ id: 'demo-test', title: 'Reutilizar a chave durante retries', rationale: 'Confirma que falhas transitórias não criam uma nova operação de cobrança.', type: 'integration', priority: 'high', relatedFiles: ['src/payment.ts', 'src/retry.ts'], source: 'ai' }],
+  },
+  delivery: { checksState: 'success', total: 3, successful: 3, failed: 0 },
+  context: {
+    status: 'applied', omitted: [],
+    sources: [
+      { path: 'AGENTS.md', kind: 'agents', sha: 'demo-agents', truncated: false, appliesTo: ['src/payment.ts', 'src/retry.ts', 'src/button.ts'] },
+      { path: 'docs/engineering/payments.md', kind: 'custom', sha: 'demo-payments', truncated: false, appliesTo: ['src/payment.ts', 'src/retry.ts'] },
+      { path: '.agents/skills/payment-review/SKILL.md', kind: 'skill', sha: 'demo-skill', truncated: false, appliesTo: ['src/payment.ts'] },
+    ],
+  },
+  comparison: { previousHeadSha: 'fixture-v2', currentHeadSha: 'fixture-v3', scoreDelta: 4, filesAdded: ['src/button.ts'], filesRemoved: [], findingsAdded: ['Nova chave pode impedir deduplicação entre tentativas'], findingsResolved: [], checksChanged: true },
+};

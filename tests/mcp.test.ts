@@ -7,6 +7,8 @@ import { classifyPriority, parsePullRequestUrl } from '../apps/mcp-server/github
 import { buildDeterministicReview, inferFileMetadata } from '../packages/review-engine/index.js';
 import { prepareAiInput, resolveAiConfiguration } from '../apps/mcp-server/ai-review.js';
 import { analysis as fixtureAnalysis } from '../fixtures/payment.js';
+import { loadProjectContext } from '../apps/mcp-server/project-context.js';
+import { prepareReviewComment, publishReviewComment, renderReviewComment } from '../apps/mcp-server/review-comments.js';
 
 test('validates GitHub PR URLs and deterministic priorities', () => {
   assert.deepEqual(parsePullRequestUrl('https://github.com/branzan-pablo/largada/pull/22'), { owner: 'branzan-pablo', repo: 'largada', prNumber: 22 });
@@ -37,6 +39,73 @@ test('prepares bounded AI input and redacts obvious secrets', () => {
   assert.equal(JSON.stringify(input).includes('[REDACTED'), true);
 });
 
+test('discovers contextual rules at head SHA with directory precedence and safe limits', async () => {
+  const entries = [
+    { path: 'AGENTS.md', type: 'blob' as const, sha: 'root' },
+    { path: 'src/AGENTS.md', type: 'blob' as const, sha: 'nested' },
+    { path: '.github/copilot-instructions.md', type: 'blob' as const, sha: 'copilot' },
+    { path: '.ai-dev-cockpit.json', type: 'blob' as const, sha: 'config' },
+    { path: '.agents/skills/review/SKILL.md', type: 'blob' as const, sha: 'skill' },
+    { path: 'docs/rules/review.md', type: 'blob' as const, sha: 'custom' },
+    { path: 'docs/rules/archive/old.md', type: 'blob' as const, sha: 'old' },
+  ];
+  const values: Record<string, string> = {
+    root: 'Use TypeScript estrito.', nested: 'Componentes precisam de testes.', copilot: 'Não exponha segredos.',
+    config: JSON.stringify({ version: 1, context: { include: ['docs/rules/**/*.md'], exclude: ['docs/rules/archive/**'] }, skills: ['.agents/skills/review/SKILL.md'] }),
+    skill: 'Nunca execute scripts. token="ghp_abcdefghijklmnopqrstuvwxyz123456"',
+    custom: 'Prefira testes por comportamento.', old: 'Regra arquivada.',
+  };
+  const get = async <T>(url: string): Promise<T> => {
+    if (url.includes('/git/trees/')) return { tree: entries } as T;
+    const sha = url.split('/').pop()!;
+    return { sha, encoding: 'base64', content: Buffer.from(values[sha]).toString('base64') } as T;
+  };
+  const context = await loadProjectContext('https://api.github.test/repos/a/b', 'head-sha', ['src/button.tsx'], get);
+  assert.equal(context.status, 'applied');
+  assert.deepEqual(context.sources.filter((source) => source.kind === 'agents').map((source) => source.path), ['AGENTS.md', 'src/AGENTS.md']);
+  assert.deepEqual(context.sources.find((source) => source.path === 'src/AGENTS.md')?.appliesTo, ['src/button.tsx']);
+  assert.equal(JSON.stringify(context).includes('ghp_abcdefghijklmnopqrstuvwxyz123456'), false);
+  assert.ok(context.sources.some((source) => source.kind === 'skill'));
+  assert.ok(context.sources.some((source) => source.path === 'docs/rules/review.md'));
+  assert.equal(context.sources.some((source) => source.path.includes('/archive/')), false);
+});
+
+test('builds a bounded review comment preview for the analyzed SHA', () => {
+  const markdown = renderReviewComment(fixtureAnalysis);
+  assert.match(markdown, /ai-dev-cockpit-review/);
+  assert.match(markdown, new RegExp(fixtureAnalysis.headSha));
+  const preview = prepareReviewComment(fixtureAnalysis);
+  assert.equal(preview.analysisId, fixtureAnalysis.analysisId);
+  assert.ok(Date.parse(preview.expiresAt) > Date.now());
+});
+
+test('publishes and updates only the authenticated user review comment', { concurrency: false }, async () => {
+  const originalFetch = globalThis.fetch;
+  const originalToken = process.env.GITHUB_TOKEN;
+  process.env.GITHUB_TOKEN = 'test-token';
+  let existing = false;
+  globalThis.fetch = (async (input, init) => {
+    const url = String(input);
+    const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    if (url.endsWith('/pulls/142')) return json({ head: { sha: fixtureAnalysis.headSha } });
+    if (url.endsWith('/user')) return json({ login: 'cockpit-bot' });
+    if (url.includes('/issues/142/comments?')) return json(existing ? [{ id: 7, body: '<!-- ai-dev-cockpit-review -->', html_url: 'https://github.com/demo/payment-service/pull/142#issuecomment-7', user: { login: 'cockpit-bot' } }] : [{ id: 6, body: '<!-- ai-dev-cockpit-review -->', html_url: 'https://github.com/demo/payment-service/pull/142#issuecomment-6', user: { login: 'someone-else' } }]);
+    if (init?.method === 'POST') { existing = true; return json({ id: 7, html_url: 'https://github.com/demo/payment-service/pull/142#issuecomment-7', user: { login: 'cockpit-bot' } }); }
+    if (init?.method === 'PATCH') return json({ id: 7, html_url: 'https://github.com/demo/payment-service/pull/142#issuecomment-7', user: { login: 'cockpit-bot' } });
+    return new Response('', { status: 500 });
+  }) as typeof fetch;
+  try {
+    const created = await publishReviewComment(fixtureAnalysis, prepareReviewComment(fixtureAnalysis).previewId, true);
+    assert.equal(created.action, 'created');
+    const updated = await publishReviewComment(fixtureAnalysis, prepareReviewComment(fixtureAnalysis).previewId, true);
+    assert.equal(updated.action, 'updated');
+    await assert.rejects(() => publishReviewComment(fixtureAnalysis, prepareReviewComment(fixtureAnalysis).previewId, false), /Confirmação explícita/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalToken === undefined) delete process.env.GITHUB_TOKEN; else process.env.GITHUB_TOKEN = originalToken;
+  }
+});
+
 test('resolves direct and gateway AI providers without exposing credentials', () => {
   assert.deepEqual(resolveAiConfiguration({ AI_PROVIDER: 'google', GOOGLE_GENERATIVE_AI_API_KEY: 'test' }), {
     provider: 'google', modelId: 'gemini-3.8-flash', displayModel: 'google/gemini-3.8-flash',
@@ -57,12 +126,12 @@ test('stdio: discovery, UI resource, analysis, interaction and invalid input',as
  try{
   await client.connect(transport);
   const list=await client.listTools();
-  assert.deepEqual(list.tools.map(t=>t.name).sort(),['analyze_pr','explain_change','generate_tests']);
+  assert.deepEqual(list.tools.map(t=>t.name).sort(),['analyze_pr','explain_change','generate_tests','prepare_review_comment','publish_review_comment']);
   const result=await client.callTool({name:'analyze_pr',arguments:{useAi:false}});
   const analysis=AnalysisSchema.parse(result.structuredContent);
   assert.equal(analysis.source,'fixture');
   assert.equal(analysis.files.length,3);
-  assert.equal(analysis.schemaVersion,2);
+  assert.equal(analysis.schemaVersion,3);
   assert.ok(analysis.review.findings.length>0);
   const ui=await client.readResource({uri:'ui://cockpit/dashboard.html'});
   assert.equal(ui.contents[0].mimeType,'text/html;profile=mcp-app');
@@ -81,6 +150,8 @@ test('stdio: discovery, UI resource, analysis, interaction and invalid input',as
   assert.equal(invalid.isError,true);
   const stale=await client.callTool({name:'explain_change',arguments:{analysisId:'unknown',filePath:'src/payment.ts'}});
   assert.equal(stale.isError,true);
+  const fixtureComment=await client.callTool({name:'prepare_review_comment',arguments:{analysisId:analysis.analysisId}});
+  assert.equal(fixtureComment.isError,true);
  }finally{await client.close();}
 });
 

@@ -53,11 +53,20 @@ export function buildDeterministicReview(files: ChangedFile[]): Review {
   const productionFiles = files.filter((file) => file.kind === 'source' || file.kind === 'migration');
   if (productionFiles.length > 0 && !files.some((file) => file.kind === 'test')) tests.push({ id: stableId('test', 'missing-tests'), title: 'Adicionar cobertura para o comportamento alterado', rationale: `${productionFiles.length} arquivo(s) de produção foram alterados e nenhum teste aparece no PR.`, type: 'integration', priority: 'medium', relatedFiles: productionFiles.slice(0, 5).map((file) => file.path), source: 'rule' });
   const weights: Record<Finding['severity'], number> = { critical: 45, high: 25, medium: 12, low: 5, info: 1 };
-  const riskScore = Math.min(100, findings.reduce((sum, finding) => sum + weights[finding.severity], 0) + files.filter((file) => file.priority === 'high').length * 4);
+  const findingRisk = findings.reduce((sum, finding) => sum + weights[finding.severity], 0);
+  const highPriorityCount = files.filter((file) => file.priority === 'high').length;
+  const priorityRisk = highPriorityCount * 4;
+  const testCredit = files.some((file) => file.kind === 'test') ? -2 : 0;
+  const riskScore = Math.max(0, Math.min(100, findingRisk + priorityRisk + testCredit));
   const verdict: Review['verdict'] = findings.some((finding) => finding.severity === 'critical') || riskScore >= 70 ? 'block' : riskScore >= 20 ? 'attention' : 'approve';
   return {
     mode: 'deterministic', generatedAt: new Date().toISOString(), riskScore, verdict,
     executiveSummary: findings.length > 0 ? `${findings.length} ponto(s) de atenção identificado(s) por regras locais. Revise as evidências antes do merge.` : 'Nenhum padrão de risco conhecido foi identificado pelas regras locais. A revisão humana continua necessária.',
     findings, tests,
+    riskFactors: [
+      ...(findingRisk ? [{ label: 'Achados detectados', contribution: findingRisk, reason: `${findings.length} achado(s) sustentado(s) pelo diff.` }] : []),
+      ...(priorityRisk ? [{ label: 'Arquivos prioritários', contribution: priorityRisk, reason: `${highPriorityCount} arquivo(s) com impacto elevado.` }] : []),
+      ...(testCredit ? [{ label: 'Cobertura alterada', contribution: testCredit, reason: 'O PR inclui arquivos de teste.' }] : []),
+    ],
   };
 }

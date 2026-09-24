@@ -8,7 +8,7 @@ try {
   if (!config) throw new Error('missing configuration');
   const models = resolveModelCandidates(config);
   const probe = process.argv.includes('--probe');
-  console.log(JSON.stringify({ version: '0.5.3', provider: config.provider, models, mode: probe ? 'api_probe' : 'review', attemptTimeoutMs: 20_000, budgetMs: 45_000 }));
+  console.log(JSON.stringify({ version: '0.6.0', provider: config.provider, models, mode: probe ? 'api_probe' : 'review', attemptTimeoutMs: 20_000, budgetMs: 45_000 }));
   console.log('Testando a API; pode consumir cota/créditos. Nenhum PR real será enviado.');
   if (probe) {
     console.log(JSON.stringify(await probeAiProvider()));

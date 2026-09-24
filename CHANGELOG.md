@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+- Contexto por repositório no head SHA, com descoberta convencional, configuração híbrida e skills textuais sem execução.
+- Contrato de análise v3 com fontes contextuais, fatores de risco e comparação de snapshots.
+- Dashboard com risco explicável, evidências completas, diff com linhas, testes acionáveis e acessibilidade reforçada.
+- Prévia e publicação confirmada de comentário consolidado e idempotente no GitHub.
+- Proteções adicionais para limites, redação, prompt injection, SHA desatualizado e autoria do comentário.
+
 ## 0.5.3
 
 - Limite independente de 20 segundos por chamada dentro dos 45 segundos totais: um modelo lento não consome sozinho todo o prazo.

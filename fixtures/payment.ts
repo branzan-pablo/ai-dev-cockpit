@@ -8,13 +8,25 @@ const files = [
 ].map((file) => ({ ...file, ...inferFileMetadata(file.path) }));
 
 export const analysis = AnalysisSchema.parse({
-  schemaVersion: 2, analysisId: 'demo-payment-v2', source: 'fixture', title: 'Retry no processamento de pagamentos',
-  repository: 'demo/payment-service', prNumber: 142, state: 'demo', author: 'demo-user', baseRef: 'main', headRef: 'feat/payment-retry', headSha: 'fixture-v2',
+  schemaVersion: 3, analysisId: 'demo-payment-v3', source: 'fixture', title: 'Retry no processamento de pagamentos',
+  repository: 'demo/payment-service', prNumber: 142, state: 'demo', author: 'demo-user', baseRef: 'main', headRef: 'feat/payment-retry', headSha: 'fixture-v3',
   summary: 'Exemplo sintético: revise a identidade da operação durante tentativas de pagamento e o tratamento de erros.',
   description: 'Cenário seguro para validar a experiência do cockpit sem consultar serviços externos.',
   partial: false, limitations: ['Dados sintéticos; nenhuma consulta ao GitHub foi realizada.'], files,
   review: buildDeterministicReview(files),
   delivery: { checksState: 'success', total: 3, successful: 3, failed: 0 },
+  context: {
+    status: 'applied', omitted: [],
+    sources: [
+      { path: 'AGENTS.md', kind: 'agents', sha: 'demo-agents', truncated: false, appliesTo: files.map((file) => file.path) },
+      { path: 'docs/engineering/payments.md', kind: 'custom', sha: 'demo-payments', truncated: false, appliesTo: ['src/payment.ts', 'src/retry.ts'] },
+      { path: '.agents/skills/payment-review/SKILL.md', kind: 'skill', sha: 'demo-skill', truncated: false, appliesTo: ['src/payment.ts'] },
+    ],
+  },
+  comparison: {
+    previousHeadSha: 'fixture-v2', currentHeadSha: 'fixture-v3', scoreDelta: 4,
+    filesAdded: ['src/button.ts'], filesRemoved: [], findingsAdded: ['Identidade de tentativa merece revisão'], findingsResolved: [], checksChanged: true,
+  },
 });
 
 export const explanations: Record<string, { explanation: string; check: string }> = {

@@ -1,5 +1,6 @@
 import { AnalysisSchema, type Analysis } from '../../packages/contracts/index.js';
 import { buildDeterministicReview, inferFileMetadata } from '../../packages/review-engine/index.js';
+import { loadProjectContext } from './project-context.js';
 
 const MAX_FILES = 60;
 const MAX_PATCH_CHARS = 20_000;
@@ -46,7 +47,7 @@ export function parsePullRequestUrl(value: string) {
   return { owner: parts[0], repo: parts[1], prNumber: Number(parts[3]) };
 }
 
-function requestHeaders() {
+export function requestHeaders() {
   const headers: Record<string, string> = {
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
@@ -56,19 +57,24 @@ function requestHeaders() {
   return headers;
 }
 
-async function githubGet<T>(url: string): Promise<T> {
-  const response = await fetch(url, { headers: requestHeaders(), signal: AbortSignal.timeout(15_000) });
+export async function githubRequest<T>(url: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(url, { ...init, headers: { ...requestHeaders(), ...init.headers }, signal: init.signal ?? AbortSignal.timeout(15_000) });
   if (!response.ok) {
     if (response.status === 404) throw new Error('PR não encontrado ou sem permissão de acesso.');
     if (response.status === 403 || response.status === 429) {
       const reset = response.headers.get('x-ratelimit-reset');
+      const exhausted = response.status === 429 || response.headers.get('x-ratelimit-remaining') === '0';
       const when = reset ? ` Tente novamente após ${new Date(Number(reset) * 1_000).toLocaleTimeString('pt-BR')}.` : '';
-      throw new Error(`Limite da API do GitHub atingido. Configure GITHUB_TOKEN e reinicie o servidor.${when}`);
+      if (exhausted) throw new Error(`Limite da API do GitHub atingido. Configure GITHUB_TOKEN e reinicie o servidor.${when}`);
+      throw new Error('O token do GitHub não possui permissão para esta operação.');
     }
+    if (response.status === 401) throw new Error('Token do GitHub inválido ou expirado.');
     throw new Error(`GitHub respondeu HTTP ${response.status}.`);
   }
-  return response.json() as Promise<T>;
+  return response.status === 204 ? undefined as T : response.json() as Promise<T>;
 }
+
+export function githubGet<T>(url: string) { return githubRequest<T>(url); }
 
 function normalizePreviewUrl(value: string | null) {
   if (!value) return undefined;
@@ -107,7 +113,10 @@ export async function fetchPullRequestAnalysis(prUrl: string, options: { refresh
     githubGet<GitHubPullRequest>(`${apiBase}/pulls/${prNumber}`),
     githubGet<GitHubFile[]>(`${apiBase}/pulls/${prNumber}/files?per_page=${MAX_FILES}`),
   ]);
-  const delivery = await fetchDelivery(apiBase, pr.head.sha);
+  const [delivery, context] = await Promise.all([
+    fetchDelivery(apiBase, pr.head.sha),
+    loadProjectContext(apiBase, pr.head.sha, files.map((file) => file.filename), githubGet),
+  ]);
   const selectedFiles = files.slice(0, MAX_FILES).map((file) => {
     const rawPatch = file.patch ?? '';
     const truncated = rawPatch.length > MAX_PATCH_CHARS;
@@ -126,7 +135,7 @@ export async function fetchPullRequestAnalysis(prUrl: string, options: { refresh
   if (selectedFiles.some((file) => !file.patchAvailable)) limitations.push('Alguns patches não foram disponibilizados pelo GitHub.');
   if (selectedFiles.some((file) => file.diff.endsWith('patch truncado pelo Cockpit'))) limitations.push('Alguns patches foram truncados por limite de tamanho.');
   const result = AnalysisSchema.parse({
-    schemaVersion: 2,
+    schemaVersion: 3,
     analysisId: `github:${repository}#${pr.number}@${pr.head.sha}`,
     source: 'github',
     title: pr.title,
@@ -143,6 +152,7 @@ export async function fetchPullRequestAnalysis(prUrl: string, options: { refresh
     files: selectedFiles,
     review: buildDeterministicReview(selectedFiles),
     delivery,
+    context,
     partial: pr.changed_files > MAX_FILES || selectedFiles.some((file) => !file.patchAvailable),
     limitations,
   });

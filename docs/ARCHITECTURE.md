@@ -21,13 +21,15 @@
 | `packages/contracts` | Schemas Zod usados pelo servidor, UI e testes. |
 | `apps/cockpit-ui` | Dashboard adaptativo e chamadas bidirecionais MCP Apps. |
 
-## Contrato de análise v2
+## Contrato de análise v3
 
 `Analysis` inclui identidade do snapshot, origem, PR, branches, autor, arquivos classificados, `Review`, `Delivery`, estado parcial e limitações. Cada arquivo carrega linguagem, tipo, prioridade, contagens, patch e disponibilidade.
 
 `Review` contém modo (`deterministic` ou `ai`), modelo opcional, timestamp, score 0–100, veredito, resumo, achados e testes. Um achado sempre exige pelo menos uma evidência vinculada a caminho válido do snapshot.
 
 `Delivery` resume os commit statuses e pode incluir uma URL HTTPS de preview. O cockpit não cria nem executa esse deployment.
+
+`ProjectContext` registra as fontes descobertas no head SHA, sua aplicação por caminho, truncamento e eventuais omissões. O texto é usado internamente na revisão e removido da resposta pública. `Comparison` descreve mudanças entre atualizações do mesmo PR. A UI continua aceitando snapshots v2 durante a transição.
 
 ## IA e confiança
 
@@ -56,6 +58,8 @@
 - Commit statuses não representam necessariamente todos os GitHub Check Runs.
 - Sem persistência, login próprio, comentários automáticos, aprovação automática ou execução de código.
 - A UI mostra diffs e abre previews existentes; ela não recompila a aplicação do PR.
+- Skills do repositório são critérios textuais não confiáveis; nunca autorizam execução, ferramentas ou rede.
+- Publicação no GitHub usa prévia temporária, confirmação explícita, validação do head SHA e comentário idempotente.
 
 ## Evolução recomendada
 
